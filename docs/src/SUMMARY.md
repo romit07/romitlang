@@ -27,7 +27,7 @@
 
 # Examples
 
-- [Beginner programs](../examples/beginner/)
+- [Beginner programs](examples/beginner.md)
 - [Advanced programs](examples/advanced.md)
 - [Planned UI syntax](examples/planned.md)
 
