@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Romit — a general-purpose language with the shortest code, written almost like a prompt. No braces. Optional checks when you need them." />
+  <meta name="description" content="Romit — shorter code, where the compiler fills in sensible defaults. Written almost like a prompt. No braces. Optional checks when you need them." />
   <title>Romit — write what you mean</title>
   <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="assets/site.css" />
@@ -32,7 +32,7 @@
         <div>
           <p class="version-pill">v0.0.1</p>
           <h1>Write what you mean. Ship it.</h1>
-          <p class="tagline">A general-purpose language with the shortest code, written almost like a prompt — indentation only, no braces, brackets, or parentheses.</p>
+          <p class="tagline">Shorter code, where the compiler fills in sensible defaults — written almost like a prompt, with indentation only and no braces, brackets, or parentheses.</p>
           <div class="cta-row">
             <a class="btn btn-primary" href="getting-started/hello.html">Get started</a>
             <a class="btn btn-secondary" href="playground/">Try it online</a>
@@ -69,8 +69,8 @@
         <h2 class="section-title">Why Romit stands out</h2>
         <div class="feature-grid">
           <article class="card">
-            <h3>Shortest code</h3>
-            <p>Often one line is a complete program. Sensible defaults — state intent, not boilerplate.</p>
+            <h3>Shorter code</h3>
+            <p>Shorter code, where the compiler fills in sensible defaults — often one line is a complete program; state intent, not boilerplate.</p>
           </article>
           <article class="card">
             <h3>Reads like a prompt</h3>
@@ -82,15 +82,15 @@
           </article>
           <article class="card">
             <h3>One tool</h3>
-            <p><code>romit run</code> for scripts; <code>romit check</code> and <code>romit test</code> when you use the optional spec layer.</p>
+            <p><code>romit run</code> for scripts; <code>romit check</code> and <code>romit test</code> when you use the optional spec layer; <code>romit build</code> for UI pages.</p>
           </article>
           <article class="card">
             <h3>Optional checks &amp; tests</h3>
             <p>Rules, machines, invariants, and <code>test</code> blocks when you want them — not required for every file.</p>
           </article>
           <article class="card">
-            <h3>Web UI &amp; API framework <span class="badge-planned">planned</span></h3>
-            <p>Built-in app layer documented in planned examples — not in the compiler yet.</p>
+            <h3>Romit UI</h3>
+            <p><code>use ui</code> and <code>romit build</code> emit static HTML and CSS today; reactive screens and APIs remain planned.</p>
           </article>
         </div>
       </div>
@@ -159,6 +159,26 @@ romit --version</code></pre>
       </div>
     </section>
 
+    <section class="features" id="landing-ui">
+      <div class="section-inner">
+        <h2 class="section-title">Landing page in 12 lines</h2>
+        <p>Romit UI lives in a separate framework (<code>use ui</code>). <code>romit build</code> writes <code>index.html</code> and <code>style.css</code> — browsers never read <code>.rmt</code>.</p>
+        <pre class="code-panel" aria-label="Sample Romit UI page"><code><span class="kw">use</span> ui
+
+<span class="kw">page</span> Landing
+  <span class="kw">header</span>
+    brand "Acme"
+    nav "Features" "Pricing" "Contact"
+  <span class="kw">hero</span>
+    title "Ship faster"
+    text "One line to say what it does."
+    button "Get started"
+  <span class="kw">footer</span>
+    text "© Acme"</code></pre>
+        <p style="margin-top:1rem"><a href="ui-framework.html">UI framework docs</a> · <a href="https://github.com/romit07/romitlang/blob/main/examples/ui/landing.rmt">full example</a></p>
+      </div>
+    </section>
+
     <section class="features" id="playground-teaser">
       <div class="section-inner">
         <h2 class="section-title">Try it online</h2>
@@ -174,7 +194,7 @@ romit --version</code></pre>
           <span class="roadmap-chip done">Stage 0–1: scripts, optional specs, playground</span>
           <span class="roadmap-chip">Stage 2: richer functions &amp; replay</span>
           <span class="roadmap-chip">Stage 3: entities &amp; machines</span>
-          <span class="roadmap-chip">Stage 4: UI layer <span class="badge-planned">planned</span></span>
+          <span class="roadmap-chip done">Stage 4: Romit UI MVP (static build)</span>
         </div>
         <p style="margin-top:1rem"><a href="reference/roadmap.html">Full roadmap</a></p>
       </div>

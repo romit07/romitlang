@@ -1,0 +1,5 @@
+use ui
+
+page X
+  theme
+    color madeup "#fff"

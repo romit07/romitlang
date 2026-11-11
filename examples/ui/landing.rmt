@@ -1,0 +1,16 @@
+use ui
+
+page Landing
+  header
+    brand "Acme"
+    nav "Features" "Pricing" "Contact"
+    button "Sign up"
+  hero
+    title "Ship faster"
+    text "One line to say what it does."
+    button "Get started"
+  section "Features"
+    card "Fast" "Compiles to plain HTML"
+    card "Simple" "No setup"
+  footer
+    text "© Acme"

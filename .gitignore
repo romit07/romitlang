@@ -1,4 +1,6 @@
 /target/
+examples/ui/dist/
+**/dist/
 docs/book/
 site/playground/pkg/
 docs/src/install.sh

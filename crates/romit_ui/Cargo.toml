@@ -1,0 +1,9 @@
+[package]
+name = "romit_ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Romit UI — static page compiler for .rmt UI specs"
+
+[dependencies]

@@ -1,12 +1,17 @@
 use romit_compiler::{check::CheckedUnit, compile_file, format_diagnostics, interp::Interpreter};
+use romit_ui::{
+    build_ui, default_out_dir, format_diagnostics as ui_format, is_ui_source, serve_preview,
+};
 use std::env;
 use std::fs;
 use std::io::{self, Write};
+use std::path::Path;
 use std::process;
 
 fn print_usage() {
     eprintln!("romit {}", env!("CARGO_PKG_VERSION"));
     eprintln!("usage: romit [--version] check <file.rmt>");
+    eprintln!("       romit build <file.rmt> [--out DIR]");
     eprintln!("       romit run <file.rmt>");
     eprintln!("       romit test <file.rmt>");
 }
@@ -39,6 +44,24 @@ fn main() {
                 };
             }
             if !run_check(&path, skip_coverage) {
+                process::exit(1);
+            }
+        }
+        "build" => {
+            let Some(path) = args.next() else {
+                eprintln!("romit build: missing file");
+                process::exit(2);
+            };
+            let mut out_dir = None;
+            while let Some(arg) = args.next() {
+                if arg == "--out" {
+                    out_dir = args.next();
+                } else {
+                    eprintln!("romit build: unknown option {arg}");
+                    process::exit(2);
+                }
+            }
+            if !run_build(&path, out_dir.as_deref()) {
                 process::exit(1);
             }
         }
@@ -76,6 +99,10 @@ fn run_check(path: &str, skip_coverage: bool) -> bool {
             return false;
         }
     };
+    if is_ui_source(&source) {
+        println!("{}: ui page (use romit build)", path);
+        return true;
+    }
     match compile_file(path, &source, skip_coverage) {
         Ok(res) => {
             for w in &res.warnings {
@@ -91,6 +118,39 @@ fn run_check(path: &str, skip_coverage: bool) -> bool {
     }
 }
 
+fn run_build(path: &str, out: Option<&str>) -> bool {
+    let source = match fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read {}: {}", path, e);
+            return false;
+        }
+    };
+    if !is_ui_source(&source) {
+        eprintln!("error: {} is not a Romit UI file (missing `use ui`)", path);
+        return false;
+    }
+    let out_path = match out {
+        Some(d) => std::path::PathBuf::from(d),
+        None => default_out_dir(Path::new(path)),
+    };
+    match build_ui(&source, path, &out_path) {
+        Ok(()) => {
+            println!(
+                "{}: wrote {}/index.html and {}/style.css",
+                path,
+                out_path.display(),
+                out_path.display()
+            );
+            true
+        }
+        Err(diags) => {
+            eprint!("{}", ui_format(&diags));
+            false
+        }
+    }
+}
+
 fn run_file(path: &str) -> bool {
     let source = match fs::read_to_string(path) {
         Ok(s) => s,
@@ -99,6 +159,14 @@ fn run_file(path: &str) -> bool {
             return false;
         }
     };
+    if is_ui_source(&source) {
+        let port = romit_ui::preview::pick_port();
+        if let Err(e) = serve_preview(Path::new(path), port) {
+            eprintln!("error: preview server: {e}");
+            return false;
+        }
+        return true;
+    }
     match romit_compiler::run_source(&source, path, 100_000) {
         Ok(outcome) => {
             print!("{}", outcome.stdout);
@@ -120,6 +188,10 @@ fn run_test(path: &str) -> bool {
             return false;
         }
     };
+    if is_ui_source(&source) {
+        eprintln!("{}: ui page (no tests in MVP)", path);
+        return true;
+    }
     let compiled = match compile_file(path, &source, true) {
         Ok(c) => c,
         Err(diags) => {

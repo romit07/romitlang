@@ -18,9 +18,10 @@
 - [Todo list](tutorials/todo.md)
 - [Traffic light](tutorials/traffic.md)
 
-# UI framework (planned)
+# Romit UI
 
 - [UI framework](ui-framework.md)
+- [Templates and overrides](ui-templates.md)
 
 # Language guide
 
