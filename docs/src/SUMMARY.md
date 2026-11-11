@@ -28,7 +28,7 @@
 - [Blocks and indentation](language/indentation.md)
 - [Calls and phrases](language/phrases.md)
 - [Strings and join](language/strings.md)
-- [Declarative layer](language/declarative.md)
+- [Optional spec layer](language/spec-layer.md)
 
 # Examples
 

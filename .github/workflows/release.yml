@@ -67,14 +67,17 @@ jobs:
 
       - name: Package (Windows)
         if: matrix.archive_ext == 'zip'
-        shell: bash
+        shell: pwsh
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          staging="romit-${version}-${{ matrix.artifact_name }}"
-          mkdir -p "dist/${staging}"
-          cp "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" "dist/${staging}/romit.exe"
-          cp LICENSE README.md "dist/${staging}/"
-          (cd dist && zip -r "../romit-${version}-${{ matrix.artifact_name }}.zip" "${staging}")
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          $staging = "romit-${version}-${{ matrix.artifact_name }}"
+          $stagingPath = Join-Path "dist" $staging
+          New-Item -ItemType Directory -Path $stagingPath -Force | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" (Join-Path $stagingPath "romit.exe")
+          Copy-Item LICENSE, README.md $stagingPath
+          $zipName = "romit-${version}-${{ matrix.artifact_name }}.zip"
+          if (Test-Path $zipName) { Remove-Item $zipName -Force }
+          Compress-Archive -Path $stagingPath -DestinationPath $zipName -CompressionLevel Optimal
 
       - uses: actions/upload-artifact@v4
         with:

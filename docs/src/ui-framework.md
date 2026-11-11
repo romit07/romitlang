@@ -54,7 +54,7 @@ This parallels:
 
 ### Layout containers
 
-Nested layout is indentation-only, same as the declarative spec layer:
+Nested layout is indentation-only, same as the optional spec layer:
 
 | Container | Role |
 |-----------|------|
@@ -268,7 +268,7 @@ export function Counter() {
 }
 ```
 
-React stores `count` in component state and re-renders on `setCount`. Romit’s planned model moves the increment into a declarative `on click` handler that `set`s spec state, closer to the **event / rule** style you already use in beginner `.rmt` files.
+React stores `count` in component state and re-renders on `setCount`. Romit’s planned model moves the increment into an `on click` handler that `set`s state — same indentation style as `.rmt` scripts and the optional spec layer.
 
 ## How compilation might work (future)
 

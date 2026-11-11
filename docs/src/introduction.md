@@ -1,10 +1,12 @@
 # Introduction
 
-Romit is a declarative language for describing state, events, rules, and tests. Programs use the `.rmt` file extension and the `romit` command-line tool.
+Romit is a **general-purpose** programming language for the **shortest possible code** — plain statements, indentation only, no braces, brackets, or parentheses. Programs use the `.rmt` file extension and the `romit` command-line tool.
 
-Romit’s surface syntax is **brace-free**: no `{ }`, `[ ]`, or `( )`. Blocks are shown only by **indentation** (two spaces per level; tabs are rejected with **P001**).
+AI-assisted work today means long prompts and big generated codebases. Romit sits in between: a **tiny language** that reads almost like a prompt but executes. Rules, state machines, invariants, and tests are an **optional spec layer** when you want checks — not required for every program.
 
-The fastest hello world is a **script** — no `spec`, `on`, or `rule`:
+Romit’s surface syntax is **brace-free**: no `{ }`, `[ ]`, or `( )`. Blocks use **indentation** (two spaces per level; tabs are rejected with **P001**).
+
+The fastest program is a **script**:
 
 ```text
 say "Hello, world!"
@@ -14,15 +16,8 @@ say "Hello, world!"
 romit run hello.rmt
 ```
 
-For full specs with outputs and tests, use the declarative form:
+For optional structured outputs and tests, start a file with `spec` — see [Optional spec layer](language/spec-layer.md) and `examples/beginner/hello_world.rmt`.
 
-```text
-on Run
-  rule say_it
-    when true
-    emit Greet with message "Hello, world!"
-```
+The compiler in this repository implements **Stage 0–1**: scripts with `say`, a checker and tests for the spec layer, a browser playground, and a small interpreter. UI `app` / `screen` syntax is **planned** — see `examples/planned/`.
 
-The compiler in this repository implements **Stage 0–1**: specs, checks, tests, scripts with `say`, a browser playground, and a small interpreter for beginner examples. UI `app` / `screen` syntax is documented under planned examples.
-
-See [Why Romit](why.md) for motivation and an honest comparison with Python, Rust, and Go.
+See [Why Romit](why.md) for motivation and a before/after prompting example.

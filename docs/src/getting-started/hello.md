@@ -40,4 +40,4 @@ test says_hello
 romit test examples/beginner/hello_world.rmt
 ```
 
-Use scripts for quick tools; use specs when you need rules, invariants, and tests.
+Use `say` scripts for the shortest programs; add a `spec` only when you want optional checks, invariants, and tests.

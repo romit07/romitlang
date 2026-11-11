@@ -1,4 +1,4 @@
-const DEFAULT = 'say "Hello, world!"\n';
+const DEFAULT = 'say "Hello from Romit"\n';
 
 const BUILT_IN = {
   hello: { name: "Hello (script)", file: "hello.rmt" },

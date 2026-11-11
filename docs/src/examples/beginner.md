@@ -32,6 +32,18 @@ test says_hello
   expect emitted Greet with message "Hello, world!"
 ```
 
+## write_what_you_mean.rmt
+
+Used in [Why Romit](../why.md) — a long English prompt versus one runnable line:
+
+```text
+say "Hello from Romit"
+```
+
+```bash
+romit run examples/beginner/write_what_you_mean.rmt
+```
+
 ## calculator.rmt
 
 See the [Calculator tutorial](../tutorials/calculator.md).
