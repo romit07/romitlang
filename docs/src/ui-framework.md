@@ -93,6 +93,8 @@ text count color accent padding 12
 
 Common modifiers in the draft: `padding`, `color`, `size`, `bold`, `muted`, `outline`, `gap` on containers.
 
+You do **not** have to set every visual property by hand. Anything you leave out is filled in from the **theme** and **defaults** cascade (below). A plain `button "Save"` with no modifiers should still look like a proper button.
+
 ### Events
 
 User gestures use phrase events—no parentheses:
@@ -107,6 +109,85 @@ on click increment
 
 Navigation stays phrase-based too: `on click go to /settings` (see `examples/planned/landing-dark.rmt`).
 
+## App `theme` and built-in defaults
+
+Romit UI is designed so **beginners can skip styling** until they care about branding.
+
+An **`app`** block names the program’s UI shell:
+
+- **`home`** — which `screen` is the entry route when the app loads
+- **`theme`** — app-wide visual tokens and control styles
+- **`defaults`** — default **screen** settings applied to every screen unless a screen overrides them
+
+The **`theme`** holds colours, type, spacing, corner radius, and interactive **states** for controls (for example `button hover`, `button pressed`, `button focus`, `button disabled`). If you do not specify something on a `text`, `button`, or container, the runtime looks it up here.
+
+**Built-in defaults** sit underneath the theme: readable contrast, minimum tap targets, and sensible fonts if the app does not define a `theme` at all.
+
+### Cascade (who wins?)
+
+When the compiler resolves how something should look, it walks from **most specific** to **least**:
+
+1. **Element override** — modifiers on one line, e.g. `text "Hi" color red`
+2. **Screen `defaults`** — the `defaults` block inside that `screen`
+3. **App `defaults`** — the `defaults` block directly under `app` (shared by all screens)
+4. **App `theme`** — tokens and per-control theme sections (`button`, `input`, …)
+5. **Built-in defaults** — what Romit ships when nothing else applies
+
+Think of it like CSS inheritance with a design system: local tweak beats page layout beats design tokens beats the browser baseline.
+
+```text
+app CounterDemo
+  home Counter
+  theme default
+    accent #7c3aed
+    button
+      background accent
+      text white
+  defaults
+    padding 20
+    background #f4f4f5
+```
+
+A `button "+"` with **no** colour or padding lines still gets the themed button background and label colour.
+
+### Screen `defaults`
+
+Each **`screen`** can rely on app-level `defaults`, or override them with its own `defaults` block. Planned screen-level keys include:
+
+| Key | Purpose |
+|-----|---------|
+| `background` | Page background (often a theme token name like `background`) |
+| `padding` | Inner padding around the main content |
+| `safe` | Respect safe areas (`top`, `bottom`, or `top bottom`) |
+| `text style` | Default typography for body copy |
+| `title style` | Style for the screen title |
+| `scroll` | Scrolling behaviour (`vertical`, `horizontal`, `none`) |
+| `align` | Default alignment for the main column |
+| `layout` | Responsive hint (`stack`, `split`, `fluid` — draft) |
+| `empty` | Message when there is no content |
+| `loading` | Message while data is loading |
+| `error` | Message when something failed |
+
+Only the keys you list need to appear; everything else falls through the cascade.
+
+```text
+screen About at /about
+  defaults
+    padding 32
+    background white
+  column
+    text "About"
+```
+
+Here `padding` and `background` override the app `defaults`; button colours still come from `theme`.
+
+### Planned example: theme + two screens
+
+See [`examples/planned/theme_cascade.rmt`](https://github.com/romit07/romitlang/blob/main/examples/planned/theme_cascade.rmt):
+
+- **`Counter`** — `button "+"` has **no** styling modifiers; it uses **`theme`** accent colours and interaction states.
+- **`About`** — overrides **`defaults`** (`padding`, `background`) only; buttons would still use the app theme.
+
 ## Example: counter (Romit draft)
 
 Full planned example: [`examples/planned/counter_ui.rmt`](https://github.com/romit07/romitlang/blob/main/examples/planned/counter_ui.rmt).
@@ -115,26 +196,31 @@ Full planned example: [`examples/planned/counter_ui.rmt`](https://github.com/rom
 note PLANNED — UI counter demo. Not parsed by Stage 1 romit.
 
 app CounterDemo
-  screen Counter at /counter
+  home Counter
+  theme default
+    accent #2563eb
+    button
+      background accent
+      text white
+  defaults
+    padding 24
+
+  screen Counter at /
     state
       count int is 0
     column
-      padding 24
       gap 16
-      align center
       text count
         size 48
-        bold
       button "+"
-        size 32
         on click increment
     on click increment
       set count to count plus 1
 ```
 
 - **`state`**: `count` starts at `0`.
-- **`text count`**: displays the live value.
-- **`button "+"`**: `on click increment` raises the event.
+- **`text count`**: displays the live value (you may still use `size` on the label; the button does not need colours).
+- **`button "+"`**: no `background` or `color` lines—the **`theme`** supplies them; `on click increment` raises the event.
 - **Handler**: one line updates state; the UI runtime (future) redraws the text.
 
 ## Same counter in SwiftUI and React
@@ -210,6 +296,7 @@ flowchart LR
 
 ## Where to go next
 
+- Theme cascade + two screens: `examples/planned/theme_cascade.rmt`
 - Landing page draft: `examples/planned/landing-dark.rmt`
 - Shorter planned overview: [Planned UI syntax](examples/planned.md)
 - Roadmap: [Roadmap](reference/roadmap.md) (Stage 4)

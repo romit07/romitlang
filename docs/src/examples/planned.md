@@ -2,7 +2,13 @@
 
 See the full design draft: **[UI framework](../ui-framework.md)** (planned, not implemented).
 
-The file `examples/planned/counter_ui.rmt` is the smallest interactive demo—state, a `text` bound to `count`, and a `"+"` button. `examples/planned/landing-dark.rmt` shows a richer **app / screen** layout (not parsed by the Stage 1 compiler):
+| File | What it shows |
+|------|----------------|
+| `counter_ui.rmt` | Minimal counter; plain `"+"` button uses **app theme** |
+| `theme_cascade.rmt` | **App** `theme`, **defaults**, two screens (one overrides **screen defaults**) |
+| `landing-dark.rmt` | Marketing layout and navigation phrases |
+
+`examples/planned/landing-dark.rmt` (excerpt— not parsed by the Stage 1 compiler):
 
 ```text
 app Landing

@@ -1,0 +1,60 @@
+note PLANNED — UI theme and screen defaults (Stage 4). Not parsed by Stage 1 romit.
+note Plain button "+" uses app theme accent; About overrides padding only.
+
+app CounterDemo
+  home Counter
+  theme default
+    background #f4f4f5
+    text #18181b
+    accent #7c3aed
+    font Inter
+    corners rounded
+    spacing 8
+    button
+      background accent
+      text white
+      padding 12 20
+      radius corners
+    button hover
+      background #6d28d9
+    button pressed
+      background #5b21b6
+    button focus
+      ring accent
+    button disabled
+      background #a1a1aa
+      text #e4e4e7
+  defaults
+    background background
+    padding 20
+    safe top bottom
+    scroll vertical
+    title style large
+    text style body
+    empty "Nothing to show"
+    loading "Loading"
+    error "Something went wrong"
+
+  screen Counter at /
+    state
+      count int is 0
+    column
+      gap 16
+      align center
+      text count
+        size 48
+        bold
+      button "+"
+        on click increment
+    on click increment
+      set count to count plus 1
+
+  screen About at /about
+    defaults
+      padding 32
+      background white
+    column
+      gap 12
+      text "Theme cascade demo"
+      text "Counter uses app defaults; this screen adds padding and a white background."
+      link "Back to counter" to /

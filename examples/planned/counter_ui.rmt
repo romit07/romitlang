@@ -1,19 +1,26 @@
 note PLANNED — Romit UI framework (Stage 4). Not parsed by the Stage 1 compiler.
-note Counter demo: reactive state, text, and a plus button.
+note Minimal counter: theme lives on the app; the "+" button has no extra styling.
 
 app CounterDemo
-  screen Counter at /counter
+  home Counter
+  theme default
+    accent #2563eb
+    button
+      background accent
+      text white
+      radius 8
+  defaults
+    padding 24
+    align center
+
+  screen Counter at /
     state
       count int is 0
     column
-      padding 24
       gap 16
-      align center
       text count
         size 48
-        bold
       button "+"
-        size 32
         on click increment
     on click increment
       set count to count plus 1
