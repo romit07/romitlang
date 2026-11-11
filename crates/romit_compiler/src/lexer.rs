@@ -22,6 +22,7 @@ pub enum TokenKind {
     Star,
     Slash,
     Dot,
+    Assign,
 }
 
 #[derive(Debug, Clone)]
@@ -332,15 +333,7 @@ impl Lexer {
                         self.bump();
                         TokenKind::Ge
                     } else {
-                        return Err(brace_err(
-                            file,
-                            &self.source,
-                            line,
-                            col,
-                            "P010",
-                            "use `set x to value` for assignment; or use `is` / `is not` for comparison",
-                        )
-                        .with_help("single `=` is not assignment in Romit"));
+                        TokenKind::Assign
                     }
                 }
                 '!' => {

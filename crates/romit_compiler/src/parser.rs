@@ -69,14 +69,14 @@ impl Parser {
                         ),
                     )
                     .with_help(
-                        "use only `say`, `print`, and `set` lines, or start the file with `spec` for the optional spec layer",
+                        "use only `say`, `print`, `set`, and `name = value` lines, or start the file with `spec` for the optional spec layer",
                     ));
                 }
             }
             let stmt_span = self.span();
             let head = self
                 .peek_word()
-                .ok_or_else(|| self.err_here("a `say`, `print`, or `set` statement"))?;
+                .ok_or_else(|| self.err_here("a `say`, `print`, `set`, or assignment statement"))?;
             match head.as_str() {
                 "say" | "print" => {
                     self.bump();
@@ -102,11 +102,27 @@ impl Parser {
                     });
                 }
                 _ => {
-                    return Err(self
-                        .err_here("a `say`, `print`, or `set` statement")
-                        .with_help(
-                            "assign with `set name to value`, output with `say` or `print`",
-                        ));
+                    let assign = self
+                        .tokens
+                        .get(self.pos + 1)
+                        .is_some_and(|t| matches!(t.kind, TokenKind::Assign));
+                    if !assign {
+                        return Err(self
+                            .err_here("a `say`, `print`, `set`, or assignment statement")
+                            .with_help(
+                                "assign with `name = value` or `set name to value`; output with `say` or `print`",
+                            ));
+                    }
+                    let name = head;
+                    self.bump();
+                    self.bump();
+                    let value = self.parse_expr_until_line()?;
+                    self.skip_newlines();
+                    stmts.push(ScriptStmt::Set {
+                        name,
+                        value,
+                        span: stmt_span,
+                    });
                 }
             }
         }
@@ -192,6 +208,19 @@ impl Parser {
             t.column,
             snippet_at(&self.source, t.line, t.column, "here"),
         )
+    }
+
+    fn err_lone_equals(&self) -> Diagnostic {
+        let t = self.peek();
+        Diagnostic::error(
+            "P010",
+            "unexpected `=`; use `is` or `==` for comparison",
+            &self.file,
+            t.line,
+            t.column,
+            snippet_at(&self.source, t.line, t.column, "="),
+        )
+        .with_help("assign at the start of a line with `x = value` or `set x to value`")
     }
 
     fn word(&mut self) -> Result<String, Diagnostic> {
@@ -1037,6 +1066,7 @@ impl Parser {
                 BinaryOp::Lt
             } else {
                 match self.peek().kind {
+                    TokenKind::Assign => return Err(self.err_lone_equals()),
                     TokenKind::Eq => {
                         self.bump();
                         BinaryOp::Eq
@@ -1109,6 +1139,9 @@ impl Parser {
                 right: Box::new(r),
                 span,
             };
+        }
+        if matches!(self.peek().kind, TokenKind::Assign) {
+            return Err(self.err_lone_equals());
         }
         Ok(e)
     }
@@ -1250,6 +1283,7 @@ impl Parser {
                 BinaryOp::Lt
             } else {
                 match self.peek().kind {
+                    TokenKind::Assign => return Err(self.err_lone_equals()),
                     TokenKind::Eq => {
                         self.bump();
                         BinaryOp::Eq

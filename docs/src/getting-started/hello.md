@@ -50,23 +50,31 @@ romit run examples/beginner/print_alias.rmt
 
 ## Variables in scripts
 
-Assign with plain words (not `=`):
+Assign with **`x = 5`** (short form) or **`set x to 5`** (readable form). Both mean the same thing; spacing after `=` is optional (`x=5` works too).
 
 ```text
-set total to 3 times 4 plus 2
+total = 3 times 4 plus 2
 say "Total: " total
-set x to 5
-set x to x plus 1
+x = 5
+x = x plus 1
 say x
 ```
 
+The wordy form is still fine:
+
+```text
+set total to 3 times 4 plus 2
+set x to 5
+```
+
 ```bash
-romit run examples/beginner/variables.rmt
+romit run examples/beginner/assign_equals.rmt
 ```
 
 Expected output:
 
 ```text
+Hi Ada
 Total: 14
 6
 ```

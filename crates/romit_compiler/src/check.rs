@@ -65,7 +65,7 @@ pub fn check_script(
     if script.stmts.is_empty() {
         diags.push(Diagnostic::error(
             "E006",
-            "script is empty; add at least one `say`, `print`, or `set` line",
+            "script is empty; add at least one `say`, `print`, `set`, or `name = value` line",
             file,
             script.span.line,
             script.span.column,
@@ -134,7 +134,7 @@ fn check_script_expr(
                     msg.push_str(&format!("; did you mean `{hint}`?"));
                 }
                 let mut d = type_err(file, source, span, "E108", msg);
-                d = d.with_help(format!("set {name} to <value> first"));
+                d = d.with_help(format!("set {name} to <value> or `{name} = <value>` first"));
                 diags.push(d);
             }
         }

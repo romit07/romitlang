@@ -9,7 +9,7 @@
 | P003 | Dedent beyond outermost block |
 | P004 | Indent does not match a prior level |
 | P013 | Braces, brackets, parens, or `:` |
-| P010 | Unexpected `=` or character (use `set x to value` for assignment) |
+| P010 | Unexpected `=` in an expression (use `is` or `==`); or unexpected character |
 | P020 | Expected indented block or statement |
 | P021 | Expected a word |
 

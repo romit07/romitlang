@@ -63,6 +63,24 @@ say x
 romit run examples/beginner/variables.rmt
 ```
 
+## assign_equals.rmt
+
+Same semantics using `=` at the start of a line (`x=5` and `x = 5`):
+
+```text
+x=5
+total = 3 times 4 plus 2
+name = "Ada"
+x = x plus 1
+say "Hi " name
+say "Total: " total
+say x
+```
+
+```bash
+romit run examples/beginner/assign_equals.rmt
+```
+
 ## write_what_you_mean.rmt
 
 Used in [Why Romit](../why.md) — a long English prompt versus one runnable line:
