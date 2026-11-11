@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Romit — a readable, rules-first language. The specification is the program." />
-  <title>Romit — readable rules-first language</title>
+  <meta name="description" content="Romit — a general-purpose language with the shortest code, written almost like a prompt. No braces. Optional checks when you need them." />
+  <title>Romit — write what you mean</title>
   <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="assets/site.css" />
 </head>
@@ -31,8 +31,8 @@
       <div class="hero-grid">
         <div>
           <p class="version-pill">v0.0.1</p>
-          <h1>The specification is the program.</h1>
-          <p class="tagline">Romit is a brace-free language where rules, state machines, invariants, and tests are first-class — checked before anything runs.</p>
+          <h1>Write what you mean. Ship it.</h1>
+          <p class="tagline">A general-purpose language with the shortest code, written almost like a prompt — indentation only, no braces, brackets, or parentheses.</p>
           <div class="cta-row">
             <a class="btn btn-primary" href="getting-started/hello.html">Get started</a>
             <a class="btn btn-secondary" href="playground/">Try it online</a>
@@ -59,42 +59,38 @@
           </div>
         </div>
         <div>
-          <pre class="code-panel" aria-label="Sample Romit program"><code><span class="kw">say</span> "Hello, world!"</code></pre>
+          <pre class="code-panel" aria-label="Sample Romit program"><code><span class="kw">say</span> "Hello from Romit"</code></pre>
         </div>
       </div>
     </section>
 
     <section class="features" id="features">
       <div class="section-inner">
-        <h2 class="section-title">Built for readable systems</h2>
+        <h2 class="section-title">Why Romit stands out</h2>
         <div class="feature-grid">
           <article class="card">
-            <h3>Brace-free syntax</h3>
-            <p>Indentation and plain words — no braces, brackets, or parentheses. Humans and assistants can read the source.</p>
+            <h3>Shortest code</h3>
+            <p>Often one line is a complete program. Sensible defaults — state intent, not boilerplate.</p>
           </article>
           <article class="card">
-            <h3>Rules built in</h3>
-            <p><code>on</code> handlers, <code>rule</code>, and <code>when</code> are part of the language — not scattered imperative patches.</p>
+            <h3>Reads like a prompt</h3>
+            <p>Plain English-like statements your team and an AI can read in one glance.</p>
           </article>
           <article class="card">
-            <h3>State machines</h3>
-            <p><code>machine</code> transitions are declared and checked so illegal states are caught early.</p>
-          </article>
-          <article class="card">
-            <h3>Invariants &amp; tests</h3>
-            <p><code>invariant</code> and <code>test</code> blocks validate behavior before release; contradictory specs get clear errors.</p>
-          </article>
-          <article class="card">
-            <h3>Value semantics <span class="badge-planned">planned</span></h3>
-            <p>Automatic reference counting and value semantics are the target memory model; the interpreter today uses a simpler runtime.</p>
-          </article>
-          <article class="card">
-            <h3>Web UI &amp; APIs <span class="badge-planned">planned</span></h3>
-            <p>Built-in app framework in a SwiftUI/React style — documented in planned examples, not yet in the compiler.</p>
+            <h3>No braces or symbols</h3>
+            <p>Indentation only — no braces, brackets, or parentheses in Romit source.</p>
           </article>
           <article class="card">
             <h3>One tool</h3>
-            <p><code>romit check</code>, <code>romit run</code>, and <code>romit test</code> ship in a single binary — no toolchain zoo.</p>
+            <p><code>romit run</code> for scripts; <code>romit check</code> and <code>romit test</code> when you use the optional spec layer.</p>
+          </article>
+          <article class="card">
+            <h3>Optional checks &amp; tests</h3>
+            <p>Rules, machines, invariants, and <code>test</code> blocks when you want them — not required for every file.</p>
+          </article>
+          <article class="card">
+            <h3>Web UI &amp; API framework <span class="badge-planned">planned</span></h3>
+            <p>Built-in app layer documented in planned examples — not in the compiler yet.</p>
           </article>
         </div>
       </div>
@@ -103,9 +99,9 @@
     <section id="why">
       <div class="section-inner">
         <h2 class="section-title">Why Romit</h2>
-        <p>Romit started from a rules-driven trading bot where changing one rule broke another. Rules, stops, and state lived as scattered code — there was no way to see whole behavior or prove a change was safe.</p>
-        <p><strong>Core idea:</strong> the specification <em>is</em> the program. Romit Kumar is building a general-purpose compiled language to eventually replace Python, Rust, and Go for everyday work — with AI-friendly, readable source the compiler checks instead of fragile generated code.</p>
-        <p><a href="why.html">Read the full story and comparison table →</a></p>
+        <p>Building with AI today means long prompts and large piles of code — hard to review, easy to break.</p>
+        <p>Romit is a tiny language between a prompt and a program: very little source that humans and models both write and review. Add rules, invariants, and tests only when you want that optional layer.</p>
+        <p><a href="why.html">The problem with prompting, before/after example, and capability snapshot →</a></p>
       </div>
     </section>
 
@@ -152,7 +148,7 @@ romit --version</code></pre>
           <div>
             <p class="step-num">Step 2</p>
             <h3>Write</h3>
-            <p>Create <code>hello.rmt</code> with <code>say "Hello, world!"</code> — or open the playground.</p>
+            <p>Create <code>hello.rmt</code> with <code>say "Hello from Romit"</code> — or open the playground.</p>
           </div>
           <div>
             <p class="step-num">Step 3</p>
@@ -175,7 +171,7 @@ romit --version</code></pre>
       <div class="section-inner">
         <h2 class="section-title">Roadmap</h2>
         <div class="roadmap-strip">
-          <span class="roadmap-chip done">Stage 0–1: specs, checker, tests, playground</span>
+          <span class="roadmap-chip done">Stage 0–1: scripts, optional specs, playground</span>
           <span class="roadmap-chip">Stage 2: richer functions &amp; replay</span>
           <span class="roadmap-chip">Stage 3: entities &amp; machines</span>
           <span class="roadmap-chip">Stage 4: UI layer <span class="badge-planned">planned</span></span>

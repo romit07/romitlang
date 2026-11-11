@@ -68,7 +68,7 @@ impl Parser {
                             w,
                         ),
                     )
-                    .with_help("use only `say` lines, or start the file with `spec` for declarative programs"));
+                    .with_help("use only `say` lines, or start the file with `spec` for the optional spec layer"));
                 }
             }
             if self.peek_word() != Some("say".into()) {

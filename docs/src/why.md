@@ -1,47 +1,89 @@
 # Why Romit
 
-Romit is a **general-purpose compiled language** that Romit Kumar is building to eventually replace Python, Rust, and Go for everyday work. It did not start as a language exercise — it started from a **rules-driven trading bot** where fixing one rule often broke another. Rules, stops, and state lived as scattered imperative code, so there was no way to see whole behavior or prove a change was safe.
+Romit is a **general-purpose compiled language** whose goal is the **shortest possible code** — short plain statements, indentation only, no braces, brackets, or parentheses, with sensible defaults so you state intent instead of boilerplate. It is meant to read almost like an AI prompt, but it runs.
 
-## The specification is the program
+## The problem with prompting today
 
-**Core idea:** what you write is the specification *and* the program. Rules, state machines, **invariants** (always-true checks), and **tests** are first-class constructs, validated before anything runs. Contradictory or unsafe programs are rejected with clear errors instead of failing in production.
+Building software with AI today still means **long prompts** and **large piles of generated code** with little structure:
 
-## Readable surface
+- The prompt is long, vague, and different every time.
+- The model rewrites whole files.
+- Fixing one thing quietly breaks another.
+- Nobody can **see or review** what the program is supposed to do in one short place.
 
-Romit uses **brace-free, bracket-free, parenthesis-free** syntax with indentation and plain words (`when`, `rule`, `set answer to`, `emit Greet with message`). The goal is source that non-programmers and AI assistants can read and edit.
+You babysit generated output instead of owning a tiny source file.
+
+## What Romit changes
+
+Romit is a **tiny readable language between a prompt and a program**. You — or an AI — write very little: often one `say` line, or a short script. Humans and models can read the whole thing in a glance.
+
+When you **want** extra safety, you can add an optional **spec layer**: state, events, rules, state machines, invariants, and tests — checked before run. That layer is there when you need it; it is not what Romit is “about” day to day.
+
+**Planned:** a simple memory model, built-in web UI and API framework, and native compilation — see [UI framework](ui-framework.md), `examples/planned/`, and the [roadmap](reference/roadmap.md).
+
+## Before and after
+
+**A long English prompt** might say: Write a small console program for me. When I run it, it should print exactly the line Hello from Romit and nothing else. Do not add a main function, build files, or dependencies I did not ask for. Keep it minimal.
+
+**A few lines of Romit** — runs today with `romit run`:
+
+```text
+say "Hello from Romit"
+```
+
+This file is `examples/beginner/write_what_you_mean.rmt`.
+
+### Optional checks
+
+When you want tests and structured behavior, add a **spec** — still short:
+
+```text
+spec HelloWorld version 1
+about "Say hello — optional spec with a test."
+
+output Greet
+  message text
+
+event Run
+
+on Run
+  rule say_it
+    when true
+    emit Greet with message "Hello from Romit"
+
+test says_hello
+  send Run
+  expect emitted Greet with message "Hello from Romit"
+```
+
+See `examples/beginner/hello_world.rmt` and run `romit test` on that file. Do not mix `say` scripts and `spec` in one file.
+
+## Reads like a prompt
+
+Romit uses **brace-free, bracket-free, parenthesis-free** syntax with indentation and plain words — `say`, `set answer to`, and when you use the spec layer, `when`, `rule`, `emit Greet with message`. Defaults carry the boilerplate so the source stays short.
 
 ## AI-friendly workflow
 
-An assistant can edit the **readable source**; the **compiler checks** it. You are not maintaining fragile generated code that drifts from intent.
+An assistant edits **very little source**; you run `romit run` or `romit test`. You are not maintaining huge generated trees that drift from intent.
 
-## Memory and apps (targets)
+## Memory and apps
 
-The target memory model is **value semantics with automatic reference counting**. A **built-in app framework** for web UI and backend APIs (SwiftUI/React style) is **planned** — see [UI framework](ui-framework.md) and `examples/planned/`.
+The target memory model is **value semantics with automatic reference counting** — **planned**. A **built-in app framework** for web UI and backend APIs is **planned**.
 
 ## One tool
 
-The `romit` binary **check**s, **test**s, and **run**s (scripts). One compiler, one workflow.
+The `romit` binary **run**s scripts, **check**s and **test**s specs when you use that layer. One compiler, one workflow.
 
-## Comparison (honest)
+## Capability snapshot (honest)
 
-| | Romit today | Python | Rust | Go |
-|---|-------------|--------|------|-----|
-| Rules, invariants, tests in the language | Yes (Stage 0–1) | No (libraries) | No | No |
-| Reject contradictory specs at compile time | Yes, where implemented | Rare | Partial (types) | Partial |
-| Readable, brace-free surface | Yes | Yes | No | No |
-| Mature package ecosystem | **Planned / early** | Excellent | Excellent | Excellent |
-| Production backends at scale | **Not yet** | Yes | Yes | Yes |
-| Native code / AOT | **Planned** (interpreter today) | Via extensions | Yes | Yes |
-| Built-in web UI framework | **Planned** | Many frameworks | Many crates | Many frameworks |
+| Area | Today | Planned |
+|------|-------|---------|
+| Short scripts with `say` | Yes | Richer expressions and functions |
+| Brace-free surface | Yes | Same |
+| Optional spec layer: rules, machines, invariants, tests | Stage 0–1 | Broader runtime coverage |
+| Catch contradictory specs early | Where implemented in checker | Stricter coverage |
+| Interpreter | Yes | AOT compiler and native binaries |
+| Built-in web UI and API framework | Not in compiler | `examples/planned/` |
+| Single `romit` tool | Yes | Same |
 
-**Today:** Romit is strong for **spec-like programs** with tests and a small interpreter. It is **not** a drop-in replacement for Python/Rust/Go yet.
-
-## Scripts vs specs
-
-For the smallest programs, use a **script** — one line is enough:
-
-```text
-say "Hello, world!"
-```
-
-Full **spec** programs keep `on`, `rule`, `emit`, and `test` for advanced behavior. Do not mix styles in one file.
+**Today:** Romit is strongest for **minimal scripts** and **small spec programs** with tests. Larger apps, native compilation, and the UI layer are **planned**.

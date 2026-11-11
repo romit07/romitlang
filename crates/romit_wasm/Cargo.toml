@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "WebAssembly bindings for Romit check, test, and run in the browser playground"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

@@ -1,53 +1,53 @@
-spec LegManager version 1
-about "Protect each leg with a stop-loss and roll it before expiry, one roll at a time."
+spec SeatRenewal version 1
+about "Renew each seat before expiry and close over-limit seats, one renewal at a time."
 
-enum Side long short
-enum Status open rolling closed
+enum Plan basic premium
+enum Status active renewing closed
 
 config
-  stop_loss_pct int is 30
-  roll_within int is 3
-  max_open int is 4
+  usage_limit_pct int is 30
+  renew_within int is 3
+  max_active int is 4
 
-entity Leg keyed by id
+entity Seat keyed by id
   id text
-  side Side
-  entry_price money above 0
-  mark money at least 0
+  plan Plan
+  quota int above 0
+  used int at least 0
   days_left int at least 0
-  status Status is open
+  status Status is active
 
-event Tick with leg Leg mark money days_left int stores mark days_left
-event RollDone with leg Leg
+event Tick with seat Seat used int days_left int stores used days_left
+event RenewDone with seat Seat
 
-output CloseLeg
-  leg text
+output CloseSeat
+  seat text
   reason text
 
-output RollLeg
-  leg text
+output RenewSeat
+  seat text
 
-define loss leg Leg returns int
-  leg.entry_price minus leg.mark
+define over_by seat Seat returns int
+  seat.used minus seat.quota
 
-machine Leg.status
-  open to rolling or closed
-  rolling to open or closed
+machine Seat.status
+  active to renewing or closed
+  renewing to active or closed
   closed to final
 
-on Tick with leg
-  rule stop_loss
-    when leg.status is open
-    set leg.status to closed
-    emit CloseLeg with leg leg.id reason "stop_loss"
+on Tick with seat
+  rule usage_limit
+    when seat.status is active
+    set seat.status to closed
+    emit CloseSeat with seat seat.id reason "usage_limit"
 
-invariant open_cap
-  count Leg where status is not closed below max_open
+invariant active_cap
+  count Seat where status is not closed below max_active
 
-limit CloseLeg at most 1 per leg
+limit CloseSeat at most 1 per seat
 
-test stop_loss_simple
-  given Leg id "A" side long entry_price 100 mark 90 days_left 5
-  send Tick with leg "A" mark 65 days_left 2
-  expect Leg at "A" status is closed
-  expect emitted CloseLeg with leg "A" reason "stop_loss"
+test usage_limit_simple
+  given Seat id "A" plan basic quota 100 used 90 days_left 5
+  send Tick with seat "A" used 65 days_left 2
+  expect Seat at "A" status is closed
+  expect emitted CloseSeat with seat "A" reason "usage_limit"

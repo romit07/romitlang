@@ -7,6 +7,7 @@ version = "0.0.1"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/romit07/romitlang"
+description = "Romit — general-purpose language with the shortest prompt-like code"
 
 [workspace.dependencies]
 romit_compiler = { path = "crates/romit_compiler" }
