@@ -2,6 +2,8 @@ const DEFAULT = 'say "Hello from Romit"\n';
 
 const BUILT_IN = {
   hello: { name: "Hello (script)", file: "hello.rmt" },
+  variables: { name: "Variables", file: "variables.rmt" },
+  print_alias: { name: "print alias", file: "print_alias.rmt" },
   hello_world: { name: "Hello (spec)", file: "hello_world.rmt" },
   calculator: { name: "Calculator", file: "calculator.rmt" },
   fibonacci: { name: "Fibonacci", file: "fibonacci.rmt" },

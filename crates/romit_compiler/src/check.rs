@@ -1,5 +1,6 @@
 use crate::ast::*;
 use crate::diag::{snippet_at, Diagnostic};
+use crate::suggest::did_you_mean;
 use crate::types::{type_from_ast, RomitType};
 use std::collections::{HashMap, HashSet};
 
@@ -64,23 +65,37 @@ pub fn check_script(
     if script.stmts.is_empty() {
         diags.push(Diagnostic::error(
             "E006",
-            "script is empty; add at least one `say` line",
+            "script is empty; add at least one `say`, `print`, or `set` line",
             file,
             script.span.line,
             script.span.column,
             snippet_at(source, script.span.line, script.span.column, "script"),
         ));
     }
+    let mut scope: Vec<String> = Vec::new();
     for stmt in &script.stmts {
-        if let ScriptStmt::Say { value, span } = stmt {
-            if !expr_is_printable(value) {
-                diags.push(type_err(
-                    file,
-                    source,
-                    span,
-                    "E107",
-                    "`say` needs a text, number, or boolean value".into(),
-                ));
+        match stmt {
+            ScriptStmt::Set {
+                name,
+                value,
+                span: _,
+            } => {
+                check_script_expr(value, &scope, file, source, &mut diags);
+                scope.push(name.clone());
+            }
+            ScriptStmt::Say { parts, span } => {
+                for part in parts {
+                    check_script_expr(part, &scope, file, source, &mut diags);
+                    if !expr_is_printable(part) {
+                        diags.push(type_err(
+                            file,
+                            source,
+                            span,
+                            "E107",
+                            "`say` or `print` needs a text, number, or boolean value".into(),
+                        ));
+                    }
+                }
             }
         }
     }
@@ -97,6 +112,75 @@ fn expr_is_printable(expr: &Expr) -> bool {
     match expr {
         Expr::Literal(_, _) | Expr::Path(_, _) | Expr::Binary { .. } | Expr::Unary { .. } => true,
         _ => false,
+    }
+}
+
+fn check_script_expr(
+    expr: &Expr,
+    scope: &[String],
+    file: &str,
+    source: &str,
+    diags: &mut Vec<Diagnostic>,
+) {
+    match expr {
+        Expr::Path(p, span) if p.parts.len() == 1 => {
+            let name = &p.parts[0];
+            if matches!(name.as_str(), "true" | "false") {
+                return;
+            }
+            if !scope.iter().any(|v| v == name) {
+                let mut msg = format!("undefined variable `{name}`");
+                if let Some(hint) = did_you_mean(name, scope) {
+                    msg.push_str(&format!("; did you mean `{hint}`?"));
+                }
+                let mut d = type_err(file, source, span, "E108", msg);
+                d = d.with_help(format!("set {name} to <value> first"));
+                diags.push(d);
+            }
+        }
+        Expr::Path(_, span) => {
+            diags.push(type_err(
+                file,
+                source,
+                span,
+                "E108",
+                "scripts use plain variable names; use `set name to value`".into(),
+            ));
+        }
+        Expr::Binary { left, right, .. } => {
+            check_script_expr(left, scope, file, source, diags);
+            check_script_expr(right, scope, file, source, diags);
+        }
+        Expr::Unary { expr, .. } => {
+            check_script_expr(expr, scope, file, source, diags);
+        }
+        Expr::Literal(_, _) => {}
+        Expr::Call { args, .. } => {
+            for a in args {
+                check_script_expr(a, scope, file, source, diags);
+            }
+        }
+        Expr::If {
+            cond,
+            then_br,
+            else_br,
+            ..
+        } => {
+            check_script_expr(cond, scope, file, source, diags);
+            check_script_expr(then_br, scope, file, source, diags);
+            check_script_expr(else_br, scope, file, source, diags);
+        }
+        Expr::Aggregate { filter, .. } => {
+            if let Some(f) = filter {
+                check_script_expr(f, scope, file, source, diags);
+            }
+        }
+        Expr::Index { key, .. } => {
+            check_script_expr(key, scope, file, source, diags);
+        }
+        Expr::ForEach { body, .. } => {
+            check_script_expr(body, scope, file, source, diags);
+        }
     }
 }
 

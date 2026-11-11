@@ -95,3 +95,55 @@ fn script_spec_mix_error() {
     let r = Parser::parse_file("mix.rmt", src);
     assert!(r.is_err());
 }
+
+#[test]
+fn run_script_variables() {
+    let src = include_str!("../../../examples/beginner/variables.rmt");
+    let out = romit_compiler::run_source(src, "variables.rmt", 1000).unwrap();
+    assert_eq!(out.stdout.trim(), "Total: 14\n6");
+}
+
+#[test]
+fn script_undefined_variable() {
+    let src = include_str!("../../../examples/negative/undefined_variable.rmt");
+    let Err(diags) = romit_compiler::compile_file("undefined_variable.rmt", src, true) else {
+        panic!("expected compile error");
+    };
+    let msgs = romit_compiler::format_diagnostics(&diags);
+    assert!(msgs.contains("E108"));
+    assert!(msgs.contains("mystery"));
+}
+
+#[test]
+fn script_rejects_equals_assignment() {
+    let src = "x = 5\nsay x";
+    let r = Parser::parse_file("eq.rmt", src);
+    assert!(r.is_err());
+    let msgs = romit_compiler::format_diagnostics(&r.unwrap_err());
+    assert!(msgs.contains("P010"));
+    assert!(msgs.contains("set x to value"));
+}
+
+#[test]
+fn print_alias_script() {
+    let src = include_str!("../../../examples/beginner/print_alias.rmt");
+    let out = romit_compiler::run_source(src, "print_alias.rmt", 1000).unwrap();
+    assert_eq!(out.stdout.trim(), "Hi\nHello, Romit\nRomit");
+}
+
+#[test]
+fn say_and_print_run_same() {
+    let say_out = romit_compiler::run_source("say \"Hi\"\n", "say.rmt", 100).unwrap();
+    let print_out = romit_compiler::run_source("print \"Hi\"\n", "print.rmt", 100).unwrap();
+    assert_eq!(say_out.stdout, print_out.stdout);
+    assert_eq!(say_out.stdout.trim(), "Hi");
+}
+
+#[test]
+fn script_set_spec_mix_still_e005() {
+    let src = "set x to 1\nenum Color red green";
+    let r = Parser::parse_file("mix2.rmt", src);
+    assert!(r.is_err());
+    let msgs = romit_compiler::format_diagnostics(&r.unwrap_err());
+    assert!(msgs.contains("E005"));
+}

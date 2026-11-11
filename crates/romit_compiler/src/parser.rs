@@ -68,22 +68,60 @@ impl Parser {
                             w,
                         ),
                     )
-                    .with_help("use only `say` lines, or start the file with `spec` for the optional spec layer"));
+                    .with_help(
+                        "use only `say`, `print`, and `set` lines, or start the file with `spec` for the optional spec layer",
+                    ));
                 }
             }
-            if self.peek_word() != Some("say".into()) {
-                return Err(self.err_here("'say' statement"));
-            }
             let stmt_span = self.span();
-            self.bump();
-            let value = self.parse_expr_until_line()?;
-            self.skip_newlines();
-            stmts.push(ScriptStmt::Say {
-                value,
-                span: stmt_span,
-            });
+            let head = self
+                .peek_word()
+                .ok_or_else(|| self.err_here("a `say`, `print`, or `set` statement"))?;
+            match head.as_str() {
+                "say" | "print" => {
+                    self.bump();
+                    let parts = self.parse_say_parts()?;
+                    self.skip_newlines();
+                    stmts.push(ScriptStmt::Say {
+                        parts,
+                        span: stmt_span,
+                    });
+                }
+                "set" => {
+                    self.bump();
+                    let name = self.word()?;
+                    if self.word()? != "to" {
+                        return Err(self.err_here("'to' after variable name"));
+                    }
+                    let value = self.parse_expr_until_line()?;
+                    self.skip_newlines();
+                    stmts.push(ScriptStmt::Set {
+                        name,
+                        value,
+                        span: stmt_span,
+                    });
+                }
+                _ => {
+                    return Err(self
+                        .err_here("a `say`, `print`, or `set` statement")
+                        .with_help(
+                            "assign with `set name to value`, output with `say` or `print`",
+                        ));
+                }
+            }
         }
         Ok(Script { stmts, span })
+    }
+
+    fn parse_say_parts(&mut self) -> Result<Vec<Expr>, Diagnostic> {
+        let mut parts = Vec::new();
+        while !self.at_line_end() {
+            parts.push(self.parse_add_line()?);
+        }
+        if parts.is_empty() {
+            return Err(self.err_here("a value after `say` or `print`"));
+        }
+        Ok(parts)
     }
 
     fn span(&self) -> Span {
@@ -706,11 +744,11 @@ impl Parser {
                 };
                 Ok(Action::Reject { message: msg, span })
             }
-            "say" => {
-                let value = self.parse_expr_until_line()?;
-                Ok(Action::Say { value, span })
+            "say" | "print" => {
+                let parts = self.parse_say_parts()?;
+                Ok(Action::Say { parts, span })
             }
-            _ => Err(self.err_here("set, emit, say, or reject")),
+            _ => Err(self.err_here("set, emit, say, print, or reject")),
         }
     }
 

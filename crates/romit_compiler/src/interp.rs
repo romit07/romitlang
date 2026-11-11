@@ -190,9 +190,12 @@ impl Interpreter {
                                 fired_rules: fired,
                             });
                         }
-                        Action::Say { value, .. } => {
-                            let v = self.eval_expr(&handler_state, value, &env);
-                            let text = format_say_value(&v, &env);
+                        Action::Say { parts, .. } => {
+                            let mut text = String::new();
+                            for part in parts {
+                                let v = self.eval_expr(&handler_state, part, &env);
+                                text.push_str(&value_to_display(&v));
+                            }
                             outputs.push(OutputRecord {
                                 name: "__say__".into(),
                                 args: vec![Value::Text(text)],
@@ -846,26 +849,50 @@ impl ScriptInterpreter {
         let env = Env::default();
         let mut out = String::new();
         let mut steps = 0u64;
+        let mut env = env;
         for stmt in &self.script.script.stmts {
-            if let ScriptStmt::Say { value, span } = stmt {
-                steps += 1;
-                if steps > max_steps {
-                    return Err(vec![Diagnostic::error(
-                        "E900",
-                        format!("execution step limit ({max_steps}) exceeded"),
-                        file,
-                        span.line,
-                        span.column,
-                        snippet_at(source, span.line, span.column, "say"),
-                    )]);
+            match stmt {
+                ScriptStmt::Set { name, value, span } => {
+                    steps += 1;
+                    if steps > max_steps {
+                        return Err(vec![step_limit_err(file, source, span, max_steps)]);
+                    }
+                    let v = eval_script_expr(&rt, value, &env);
+                    // copy-on-assign: variables hold an owned snapshot of the value
+                    env.locals.insert(name.clone(), v);
                 }
-                let v = eval_script_expr(&rt, value, &env);
-                let line = format_say_value(&v, &env);
-                writeln!(out, "{line}").ok();
+                ScriptStmt::Say { parts, span } => {
+                    steps += 1;
+                    if steps > max_steps {
+                        return Err(vec![step_limit_err(file, source, span, max_steps)]);
+                    }
+                    let line = format_say_parts(parts, &rt, &env);
+                    writeln!(out, "{line}").ok();
+                }
             }
         }
         Ok(RunOutcome { stdout: out, steps })
     }
+}
+
+fn step_limit_err(file: &str, source: &str, span: &Span, max_steps: u64) -> Diagnostic {
+    Diagnostic::error(
+        "E900",
+        format!("execution step limit ({max_steps}) exceeded"),
+        file,
+        span.line,
+        span.column,
+        snippet_at(source, span.line, span.column, "statement"),
+    )
+}
+
+fn format_say_parts(parts: &[Expr], rt: &RuntimeState, env: &Env) -> String {
+    let mut line = String::new();
+    for part in parts {
+        let v = eval_script_expr(rt, part, env);
+        line.push_str(&value_to_display(&v));
+    }
+    line
 }
 
 fn eval_script_expr(rt: &RuntimeState, expr: &Expr, env: &Env) -> Value {

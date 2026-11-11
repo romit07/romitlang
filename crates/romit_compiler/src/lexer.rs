@@ -338,8 +338,9 @@ impl Lexer {
                             line,
                             col,
                             "P010",
-                            "expected == or >= for comparison; or spell out `is` / `is not`",
-                        ));
+                            "use `set x to value` for assignment; or use `is` / `is not` for comparison",
+                        )
+                        .with_help("single `=` is not assignment in Romit"));
                     }
                 }
                 '!' => {
