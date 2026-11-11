@@ -6,42 +6,16 @@ After [installing Romit](../install.md):
 romit --version
 ```
 
-Create `hello.rmt` in a new folder:
+Create `hello.rmt`:
 
 ```text
-spec HelloWorld version 1
-
-output Greet
-  message text
-
-event Run
-
-on Run
-  rule say_it
-    when true
-    emit Greet with message "Hello, world!"
-
-test says_hello
-  send Run
-  expect emitted Greet with message "Hello, world!"
+say "Hello, world!"
 ```
 
-Type-check it:
+Run it:
 
 ```bash
-romit check hello.rmt
+romit run hello.rmt
 ```
 
-Run tests in the file:
-
-```bash
-romit test hello.rmt
-```
-
-The repository example is the same program:
-
-```bash
-romit test examples/beginner/hello_world.rmt
-```
-
-Use `romit check --no-coverage <file>` on large specs when you want to skip rule-coverage diagnostics.
+For specs with tests, see [Hello world](hello.md) and `examples/beginner/`.

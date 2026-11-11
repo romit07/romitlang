@@ -9,6 +9,23 @@ pub struct Span {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum Program {
+    Spec(Spec),
+    Script(Script),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Script {
+    pub stmts: Vec<ScriptStmt>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ScriptStmt {
+    Say { value: Expr, span: Span },
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Spec {
     pub name: String,
     pub version: i64,
@@ -168,6 +185,10 @@ pub enum Action {
     },
     Reject {
         message: String,
+        span: Span,
+    },
+    Say {
+        value: Expr,
         span: Span,
     },
 }

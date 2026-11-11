@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Romit Playground</title>
+  <link rel="stylesheet" href="../assets/site.css" />
+  <link rel="stylesheet" href="playground.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="nav-inner">
+      <a class="logo-link" href="/">
+        <img src="../assets/logo.svg" alt="Romit" width="120" height="32" />
+      </a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="../introduction.html">Docs</a>
+        <a href="../install.html">Install</a>
+        <a href="./" aria-current="page">Playground</a>
+        <a href="../why.html">Why Romit</a>
+        <a href="https://github.com/romit07/romitlang">GitHub</a>
+        <button type="button" class="theme-toggle" data-theme-toggle aria-label="Toggle theme">Dark</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="playground-layout">
+    <div class="pg-toolbar">
+      <button type="button" class="btn btn-primary" id="run-btn">Run</button>
+      <button type="button" class="btn btn-secondary" id="check-btn">Check</button>
+      <button type="button" class="btn btn-ghost" id="reset-btn">Reset</button>
+      <label class="pg-examples">
+        <span class="sr-only">Example</span>
+        <select id="examples" aria-label="Load example"></select>
+      </label>
+      <span class="pg-status" id="status">Loading WASM…</span>
+    </div>
+
+    <div class="pg-editor-wrap">
+      <div class="line-nums" id="line-nums" aria-hidden="true">1</div>
+      <textarea id="editor" spellcheck="false" aria-label="Romit source code"></textarea>
+    </div>
+
+    <div>
+      <h2 class="section-title" style="font-size:1.25rem">Output</h2>
+      <pre class="pg-output" id="output" aria-live="polite"></pre>
+      <p style="color:var(--text-muted);font-size:0.85rem;margin-top:0.75rem">
+        <kbd>Ctrl</kbd>+<kbd>Enter</kbd> or <kbd>⌘</kbd>+<kbd>Enter</kbd> to run.
+        Shareable links encode your program in the URL hash.
+      </p>
+    </div>
+  </main>
+
+  <script src="../assets/site.js" defer></script>
+  <script type="module" src="playground.js"></script>
+</body>
+</html>

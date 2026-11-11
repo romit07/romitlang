@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Romit — a readable, rules-first language. The specification is the program." />
+  <title>Romit — readable rules-first language</title>
+  <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="nav-inner">
+      <a class="logo-link" href="/" aria-current="page">
+        <img src="assets/logo.svg" alt="Romit" width="120" height="32" />
+      </a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="introduction.html">Docs</a>
+        <a href="install.html">Install</a>
+        <a href="playground/">Playground</a>
+        <a href="why.html">Why Romit</a>
+        <a href="https://github.com/romit07/romitlang">GitHub</a>
+        <button type="button" class="theme-toggle" data-theme-toggle aria-label="Toggle light or dark theme">Dark</button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero section-inner" id="top">
+      <hr class="sr-only" />
+      <div class="hero-grid">
+        <div>
+          <p class="version-pill">v0.0.1</p>
+          <h1>The specification is the program.</h1>
+          <p class="tagline">Romit is a brace-free language where rules, state machines, invariants, and tests are first-class — checked before anything runs.</p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="getting-started/hello.html">Get started</a>
+            <a class="btn btn-secondary" href="playground/">Try it online</a>
+            <a class="btn btn-ghost" href="https://github.com/romit07/romitlang">GitHub</a>
+          </div>
+          <div class="install-snippet" data-install-tabs>
+            <div class="install-tabs" role="tablist" aria-label="Install command">
+              <button type="button" role="tab" aria-selected="true" data-install-tab="mac">macOS</button>
+              <button type="button" role="tab" aria-selected="false" data-install-tab="linux">Linux</button>
+              <button type="button" role="tab" aria-selected="false" data-install-tab="win">Windows</button>
+            </div>
+            <div class="install-body" data-install-panel="mac" role="tabpanel">
+              <code id="install-cmd-mac">curl -fsSL https://romitlang.org/install.sh | sh</code>
+              <button type="button" class="copy-btn" data-copy-target="#install-cmd-mac">Copy</button>
+            </div>
+            <div class="install-body" data-install-panel="linux" role="tabpanel" hidden>
+              <code id="install-cmd-linux">curl -fsSL https://romitlang.org/install.sh | sh</code>
+              <button type="button" class="copy-btn" data-copy-target="#install-cmd-linux">Copy</button>
+            </div>
+            <div class="install-body" data-install-panel="win" role="tabpanel" hidden>
+              <code id="install-cmd-win">irm https://romitlang.org/install.ps1 | iex</code>
+              <button type="button" class="copy-btn" data-copy-target="#install-cmd-win">Copy</button>
+            </div>
+          </div>
+        </div>
+        <div>
+          <pre class="code-panel" aria-label="Sample Romit program"><code><span class="kw">say</span> "Hello, world!"</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="features" id="features">
+      <div class="section-inner">
+        <h2 class="section-title">Built for readable systems</h2>
+        <div class="feature-grid">
+          <article class="card">
+            <h3>Brace-free syntax</h3>
+            <p>Indentation and plain words — no braces, brackets, or parentheses. Humans and assistants can read the source.</p>
+          </article>
+          <article class="card">
+            <h3>Rules built in</h3>
+            <p><code>on</code> handlers, <code>rule</code>, and <code>when</code> are part of the language — not scattered imperative patches.</p>
+          </article>
+          <article class="card">
+            <h3>State machines</h3>
+            <p><code>machine</code> transitions are declared and checked so illegal states are caught early.</p>
+          </article>
+          <article class="card">
+            <h3>Invariants &amp; tests</h3>
+            <p><code>invariant</code> and <code>test</code> blocks validate behavior before release; contradictory specs get clear errors.</p>
+          </article>
+          <article class="card">
+            <h3>Value semantics <span class="badge-planned">planned</span></h3>
+            <p>Automatic reference counting and value semantics are the target memory model; the interpreter today uses a simpler runtime.</p>
+          </article>
+          <article class="card">
+            <h3>Web UI &amp; APIs <span class="badge-planned">planned</span></h3>
+            <p>Built-in app framework in a SwiftUI/React style — documented in planned examples, not yet in the compiler.</p>
+          </article>
+          <article class="card">
+            <h3>One tool</h3>
+            <p><code>romit check</code>, <code>romit run</code>, and <code>romit test</code> ship in a single binary — no toolchain zoo.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="why">
+      <div class="section-inner">
+        <h2 class="section-title">Why Romit</h2>
+        <p>Romit started from a rules-driven trading bot where changing one rule broke another. Rules, stops, and state lived as scattered code — there was no way to see whole behavior or prove a change was safe.</p>
+        <p><strong>Core idea:</strong> the specification <em>is</em> the program. Romit Kumar is building a general-purpose compiled language to eventually replace Python, Rust, and Go for everyday work — with AI-friendly, readable source the compiler checks instead of fragile generated code.</p>
+        <p><a href="why.html">Read the full story and comparison table →</a></p>
+      </div>
+    </section>
+
+    <section class="features" id="install">
+      <div class="section-inner">
+        <h2 class="section-title">Install</h2>
+        <div class="install-snippet" data-install-tabs>
+          <div class="install-tabs" role="tablist" aria-label="Platform install details">
+            <button type="button" role="tab" aria-selected="true" data-install-tab="mac">macOS</button>
+            <button type="button" role="tab" aria-selected="false" data-install-tab="linux">Linux</button>
+            <button type="button" role="tab" aria-selected="false" data-install-tab="win">Windows</button>
+          </div>
+          <div data-install-panel="mac" role="tabpanel">
+            <pre class="code-panel"><code>export ROMIT_VERSION=0.0.1
+curl -fsSL https://romitlang.org/install.sh | sh
+export PATH="$HOME/.romit/bin:$PATH"
+romit --version</code></pre>
+          </div>
+          <div data-install-panel="linux" role="tabpanel" hidden>
+            <pre class="code-panel"><code>export ROMIT_VERSION=0.0.1
+curl -fsSL https://romitlang.org/install.sh | sh
+export PATH="$HOME/.romit/bin:$PATH"
+romit --version</code></pre>
+          </div>
+          <div data-install-panel="win" role="tabpanel" hidden>
+            <pre class="code-panel"><code>$env:ROMIT_VERSION = "0.0.1"
+irm https://romitlang.org/install.ps1 | iex
+romit --version</code></pre>
+          </div>
+        </div>
+        <p style="margin-top:1rem;color:var(--text-muted)">Details: <a href="install.html">install guide</a> · verify with <code>romit --version</code> → <code>romit 0.0.1</code></p>
+      </div>
+    </section>
+
+    <section id="start">
+      <div class="section-inner">
+        <h2 class="section-title">Getting started in three steps</h2>
+        <div class="steps">
+          <div>
+            <p class="step-num">Step 1</p>
+            <h3>Install</h3>
+            <p>Run the one-line installer for your OS and add <code>~/.romit/bin</code> to PATH.</p>
+          </div>
+          <div>
+            <p class="step-num">Step 2</p>
+            <h3>Write</h3>
+            <p>Create <code>hello.rmt</code> with <code>say "Hello, world!"</code> — or open the playground.</p>
+          </div>
+          <div>
+            <p class="step-num">Step 3</p>
+            <h3>Run &amp; test</h3>
+            <p><code>romit run hello.rmt</code> for scripts; <code>romit test program.rmt</code> for specs with tests.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="features" id="playground-teaser">
+      <div class="section-inner">
+        <h2 class="section-title">Try it online</h2>
+        <p>Compile and run Romit in your browser — powered by WebAssembly, no install required.</p>
+        <a class="btn btn-primary" href="playground/">Open playground</a>
+      </div>
+    </section>
+
+    <section id="roadmap">
+      <div class="section-inner">
+        <h2 class="section-title">Roadmap</h2>
+        <div class="roadmap-strip">
+          <span class="roadmap-chip done">Stage 0–1: specs, checker, tests, playground</span>
+          <span class="roadmap-chip">Stage 2: richer functions &amp; replay</span>
+          <span class="roadmap-chip">Stage 3: entities &amp; machines</span>
+          <span class="roadmap-chip">Stage 4: UI layer <span class="badge-planned">planned</span></span>
+        </div>
+        <p style="margin-top:1rem"><a href="reference/roadmap.html">Full roadmap</a></p>
+      </div>
+    </section>
+
+    <section class="features" id="community">
+      <div class="section-inner">
+        <h2 class="section-title">Community</h2>
+        <p>Source and issues live on GitHub. Contributions welcome — read the docs, try examples under <code>examples/</code>, and open an issue when something is unclear.</p>
+        <a class="btn btn-secondary" href="https://github.com/romit07/romitlang/issues">Issues</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <span>MIT License · Romit contributors</span>
+      <span>
+        <a href="introduction.html">Docs</a> ·
+        <a href="install.html">Install</a> ·
+        <a href="playground/">Playground</a> ·
+        <a href="https://github.com/romit07/romitlang">GitHub</a>
+      </span>
+    </div>
+  </footer>
+  <script src="assets/site.js" defer></script>
+</body>
+</html>

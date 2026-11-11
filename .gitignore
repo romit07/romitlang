@@ -1,6 +1,8 @@
 /target/
 docs/book/
+site/playground/pkg/
 docs/src/install.sh
 docs/src/install.ps1
 .install-test-dist/
 .install-test-home/
+site/playground/examples/

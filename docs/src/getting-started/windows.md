@@ -1,44 +1,21 @@
 # Getting started on Windows
 
-After [installing Romit](../install.md), open a new terminal so `PATH` updates apply:
+After [installing Romit](../install.md):
 
 ```powershell
 romit --version
 ```
 
-Create `hello.rmt` with your editor:
+Create `hello.rmt`:
 
 ```text
-spec HelloWorld version 1
-
-output Greet
-  message text
-
-event Run
-
-on Run
-  rule say_it
-    when true
-    emit Greet with message "Hello, world!"
-
-test says_hello
-  send Run
-  expect emitted Greet with message "Hello, world!"
+say "Hello, world!"
 ```
 
-From PowerShell in that folder:
+Run it:
 
 ```powershell
-romit check hello.rmt
-romit test hello.rmt
+romit run hello.rmt
 ```
 
-Clone the repo to run the same file from examples:
-
-```powershell
-git clone https://github.com/romit07/romitlang.git
-cd romitlang
-romit test examples\beginner\hello_world.rmt
-```
-
-The CLI commands today are `romit check` and `romit test` — there is no separate `romit run` subcommand yet.
+For specs with tests, see [Hello world](hello.md) and `examples/beginner/`.

@@ -2,6 +2,8 @@
 
 [Introduction](introduction.md)
 
+- [Why Romit](why.md)
+
 # Getting started
 
 - [Install](install.md)

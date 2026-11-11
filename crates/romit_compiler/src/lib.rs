@@ -8,13 +8,13 @@ pub mod parser;
 pub mod replay;
 pub mod types;
 
-use check::{check, CheckedProgram};
+use check::{check_program, CheckedUnit};
 use diag::Diagnostic;
 use parser::Parser;
 use std::collections::HashSet;
 
 pub struct CompileResult {
-    pub program: CheckedProgram,
+    pub unit: CheckedUnit,
     pub warnings: Vec<Diagnostic>,
 }
 
@@ -23,16 +23,25 @@ pub fn compile_file(
     source: &str,
     skip_coverage: bool,
 ) -> Result<CompileResult, Vec<Diagnostic>> {
-    let spec = match Parser::parse_file(file, source) {
-        Ok(s) => s,
-        Err(e) => return Err(e),
-    };
-    let program = match check(spec, file, source) {
+    let program = match Parser::parse_file(file, source) {
         Ok(p) => p,
         Err(e) => return Err(e),
     };
+    let unit = match check_program(program, file, source) {
+        Ok(u) => u,
+        Err(e) => return Err(e),
+    };
 
-    let mut warnings = Vec::new();
+    if unit.is_script() {
+        return Ok(CompileResult {
+            unit,
+            warnings: Vec::new(),
+        });
+    }
+
+    let program = unit.as_spec().expect("spec").clone();
+
+    let warnings = Vec::new();
     let mut coverage_errs = Vec::new();
 
     if !skip_coverage {
@@ -83,7 +92,10 @@ pub fn compile_file(
         return Err(coverage_errs);
     }
 
-    Ok(CompileResult { program, warnings })
+    Ok(CompileResult {
+        unit: CheckedUnit::Spec(program),
+        warnings,
+    })
 }
 
 pub fn format_diagnostics(diags: &[Diagnostic]) -> String {
@@ -92,4 +104,34 @@ pub fn format_diagnostics(diags: &[Diagnostic]) -> String {
         .map(|d| d.to_string())
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+pub fn check_source(
+    file: &str,
+    source: &str,
+    skip_coverage: bool,
+) -> Result<CompileResult, Vec<Diagnostic>> {
+    compile_file(file, source, skip_coverage)
+}
+
+pub fn run_source(
+    source: &str,
+    file: &str,
+    max_steps: u64,
+) -> Result<interp::RunOutcome, Vec<Diagnostic>> {
+    let compiled = compile_file(file, source, true)?;
+    match &compiled.unit {
+        CheckedUnit::Script(script) => {
+            let i = interp::ScriptInterpreter::new(script.clone());
+            i.run_with_limits(file, source, max_steps)
+        }
+        CheckedUnit::Spec(_) => Err(vec![Diagnostic::error(
+            "E007",
+            "only scripts can run without a spec; start with `say` lines or use `romit test`",
+            file,
+            1,
+            1,
+            diag::snippet_at(source, 1, 1, "file"),
+        )]),
+    }
 }

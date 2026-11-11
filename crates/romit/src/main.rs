@@ -1,11 +1,13 @@
-use romit_compiler::{compile_file, format_diagnostics, interp::Interpreter};
+use romit_compiler::{check::CheckedUnit, compile_file, format_diagnostics, interp::Interpreter};
 use std::env;
 use std::fs;
+use std::io::{self, Write};
 use std::process;
 
 fn print_usage() {
     eprintln!("romit {}", env!("CARGO_PKG_VERSION"));
     eprintln!("usage: romit [--version] check <file.rmt>");
+    eprintln!("       romit run <file.rmt>");
     eprintln!("       romit test <file.rmt>");
 }
 
@@ -37,6 +39,15 @@ fn main() {
                 };
             }
             if !run_check(&path, skip_coverage) {
+                process::exit(1);
+            }
+        }
+        "run" => {
+            let Some(path) = args.next() else {
+                eprintln!("romit run: missing file");
+                process::exit(2);
+            };
+            if !run_file(&path) {
                 process::exit(1);
             }
         }
@@ -80,6 +91,27 @@ fn run_check(path: &str, skip_coverage: bool) -> bool {
     }
 }
 
+fn run_file(path: &str) -> bool {
+    let source = match fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error: cannot read {}: {}", path, e);
+            return false;
+        }
+    };
+    match romit_compiler::run_source(&source, path, 100_000) {
+        Ok(outcome) => {
+            print!("{}", outcome.stdout);
+            let _ = io::stdout().flush();
+            true
+        }
+        Err(diags) => {
+            eprint!("{}", format_diagnostics(&diags));
+            false
+        }
+    }
+}
+
 fn run_test(path: &str) -> bool {
     let source = match fs::read_to_string(path) {
         Ok(s) => s,
@@ -95,7 +127,11 @@ fn run_test(path: &str) -> bool {
             return false;
         }
     };
-    let interp = Interpreter::new(compiled.program);
+    let CheckedUnit::Spec(program) = compiled.unit else {
+        println!("{}: script (no tests)", path);
+        return true;
+    };
+    let interp = Interpreter::new(program);
     match interp.run_tests(path, &source) {
         Ok(passed) => {
             println!("{}: {} test(s) passed", path, passed.len());
