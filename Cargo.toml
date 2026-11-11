@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = ["crates/romit", "crates/romit_compiler"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/romit07/romitlang"
+
+[workspace.dependencies]
+romit_compiler = { path = "crates/romit_compiler" }

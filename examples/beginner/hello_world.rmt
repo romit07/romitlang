@@ -1,0 +1,16 @@
+spec HelloWorld version 1
+about "Say hello — the smallest Romit program."
+
+output Greet
+  message text
+
+event Run
+
+on Run
+  rule say_it
+    when true
+    emit Greet with message "Hello, world!"
+
+test says_hello
+  send Run
+  expect emitted Greet with message "Hello, world!"

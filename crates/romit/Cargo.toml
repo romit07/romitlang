@@ -1,0 +1,13 @@
+[package]
+name = "romit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "romit"
+path = "src/main.rs"
+
+[dependencies]
+romit_compiler.workspace = true

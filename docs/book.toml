@@ -1,0 +1,10 @@
+[book]
+title = "The Romit language"
+authors = ["Romit contributors"]
+language = "en"
+multilingual = false
+src = "src"
+
+[output.html]
+site-url = "/romitlang/"
+cname = "romitlang.org"

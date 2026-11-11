@@ -1,0 +1,79 @@
+spec GardenValve version 1
+about "Water when the soil is dry; stop when wet, after 20 minutes, or when the tank runs low."
+
+enum Valve closed open
+
+config
+  dry_below int is 30
+  wet_above int is 45
+  max_run int is 20
+  daily_cap int is 60
+  min_tank int is 10
+
+state
+  valve Valve is closed
+  run int is 0
+  today int is 0
+  moisture int is 50
+  tank int is 100
+  rain_expected bool is false
+
+event Reading with moisture int tank int rain_expected bool stores all
+event MinutePassed
+event NewDay
+
+output SetValve
+  to text
+
+machine valve
+  closed to open
+  open to closed
+
+on Reading
+  rule stop_tank_low
+    when valve is open and tank below min_tank
+    set valve to closed
+    emit SetValve with to closed
+  rule stop_wet
+    when valve is open and moisture above wet_above
+    set valve to closed
+    emit SetValve with to closed
+  rule start_watering
+    when valve is closed and moisture below dry_below and not rain_expected and tank above min_tank and today below daily_cap
+    set valve to open
+    set run to 0
+    emit SetValve with to open
+
+on MinutePassed
+  rule count_minute
+    when valve is open
+    set run to run plus 1
+    set today to today plus 1
+  rule time_limit
+    when valve is open and run above max_run
+    set valve to closed
+    emit SetValve with to closed
+
+on NewDay
+  rule reset_day
+    when true
+    set today to 0
+
+invariant never_run_dry
+  not valve is open and tank below min_tank
+
+invariant run_is_bounded
+  run below max_run or valve is closed
+
+test starts_when_dry
+  given moisture to 25
+  given tank to 80
+  send Reading with moisture 25 tank 80 rain_expected false
+  expect valve is open
+  expect emitted SetValve with to open
+
+test rain_blocks_start
+  given tank to 80
+  send Reading with moisture 25 tank 80 rain_expected true
+  expect valve is closed
+  expect no outputs

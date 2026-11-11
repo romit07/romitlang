@@ -1,0 +1,2 @@
+spec Bad version 1
+state { x: int = 0 }

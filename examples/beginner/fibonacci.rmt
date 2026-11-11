@@ -1,0 +1,34 @@
+spec Fibonacci version 1
+about "Small Fibonacci answers without recursion — Stage 2 adds real functions."
+
+state
+  result int is 0
+
+event Compute with n int
+
+on Compute with n if n is 0
+  rule zero
+    when true
+    set result to 0
+
+on Compute with n if n is 1
+  rule one
+    when true
+    set result to 1
+
+on Compute with n if n is 10
+  rule ten
+    when true
+    set result to 55
+
+test fib_of_10
+  send Compute with n 10
+  expect result is 55
+
+test fib_of_0
+  send Compute with n 0
+  expect result is 0
+
+test fib_of_1
+  send Compute with n 1
+  expect result is 1

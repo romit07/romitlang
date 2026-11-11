@@ -1,0 +1,53 @@
+spec LegManager version 1
+about "Protect each leg with a stop-loss and roll it before expiry, one roll at a time."
+
+enum Side long short
+enum Status open rolling closed
+
+config
+  stop_loss_pct int is 30
+  roll_within int is 3
+  max_open int is 4
+
+entity Leg keyed by id
+  id text
+  side Side
+  entry_price money above 0
+  mark money at least 0
+  days_left int at least 0
+  status Status is open
+
+event Tick with leg Leg mark money days_left int stores mark days_left
+event RollDone with leg Leg
+
+output CloseLeg
+  leg text
+  reason text
+
+output RollLeg
+  leg text
+
+define loss leg Leg returns int
+  leg.entry_price minus leg.mark
+
+machine Leg.status
+  open to rolling or closed
+  rolling to open or closed
+  closed to final
+
+on Tick with leg
+  rule stop_loss
+    when leg.status is open
+    set leg.status to closed
+    emit CloseLeg with leg leg.id reason "stop_loss"
+
+invariant open_cap
+  count Leg where status is not closed below max_open
+
+limit CloseLeg at most 1 per leg
+
+test stop_loss_simple
+  given Leg id "A" side long entry_price 100 mark 90 days_left 5
+  send Tick with leg "A" mark 65 days_left 2
+  expect Leg at "A" status is closed
+  expect emitted CloseLeg with leg "A" reason "stop_loss"

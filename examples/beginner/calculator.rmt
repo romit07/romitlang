@@ -1,0 +1,15 @@
+spec Calculator version 1
+about "Multiply and add in one line — no buttons required."
+
+state
+  answer int is 0
+event Evaluate
+
+on Evaluate
+  rule sample
+    when true
+    set answer to 3 times 4 plus 2
+
+test two_times_three_plus_two
+  send Evaluate
+  expect answer is 14

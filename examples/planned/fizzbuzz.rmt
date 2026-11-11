@@ -1,0 +1,6 @@
+# PLANNED — full FizzBuzz needs loops and `fn` (Stage 2 general core).
+# Use examples/beginner/calculator.rmt for math you can run today.
+#
+# module FizzBuzz
+#   fn fizzbuzz(n: int) -> text
+#     ...

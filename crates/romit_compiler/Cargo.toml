@@ -1,0 +1,16 @@
+[package]
+name = "romit_compiler"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "parse_dbg"
+path = "src/bin/parse_dbg.rs"
+
+[[bin]]
+name = "tok_dump"
+path = "src/bin/tok_dump.rs"
+
+[dependencies]

@@ -1,0 +1,6 @@
+# PLANNED — Romit HTTP API layer (Stage 4)
+# Not executed by the Stage 1 interpreter.
+#
+# api spec HelloApi version 1
+#   route GET "/hello" -> text("Hello from Romit!")
+#   route POST "/todos" -> accept TodoBody, emit TodoCreated

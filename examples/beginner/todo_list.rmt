@@ -1,0 +1,36 @@
+spec TodoList version 1
+about "One task at a time: add text, then mark it done."
+
+state
+  task_text text is ""
+  task_done bool is false
+
+event Add
+event MarkDone
+
+output TaskAdded
+  title text
+
+output TaskCompleted
+  title text
+
+on Add with title
+  rule create
+    when not task_done or task_text is ""
+    set task_text to title
+    set task_done to false
+    emit TaskAdded with title title
+
+on MarkDone
+  rule finish
+    when task_text is not "" and not task_done
+    set task_done to true
+    emit TaskCompleted with title task_text
+
+test add_then_done
+  send Add with title "Buy milk"
+  expect task_text is "Buy milk"
+  expect emitted TaskAdded with title "Buy milk"
+  send MarkDone
+  expect task_done is true
+  expect emitted TaskCompleted with title "Buy milk"

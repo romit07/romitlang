@@ -1,0 +1,50 @@
+spec TrafficLight version 1
+about "A traffic light that cycles red → green → yellow."
+
+enum Color red green yellow
+
+state
+  light Color is red
+
+event Tick
+
+output ShowLight
+  color text
+
+machine light
+  red to green
+  green to yellow
+  yellow to red
+
+on Tick if light is red
+  rule advance
+    when true
+    set light to green
+    emit ShowLight with color green
+
+on Tick if light is green
+  rule go_yellow
+    when true
+    set light to yellow
+    emit ShowLight with color yellow
+
+on Tick if light is yellow
+  rule go_red
+    when true
+    set light to red
+    emit ShowLight with color red
+
+invariant only_known_colors
+  light is red or light is green or light is yellow
+
+test red_to_green
+  send Tick
+  expect light is green
+  expect emitted ShowLight with color green
+
+test full_cycle
+  given light is green
+  send Tick
+  expect light is yellow
+  send Tick
+  expect light is red

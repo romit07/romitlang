@@ -1,0 +1,104 @@
+spec RefundDesk version 1
+about "Decide refund requests automatically when safe, escalate the rest to a person."
+
+enum Decision pending approved denied escalated
+
+config
+  auto_limit money is 50
+  window_days int is 30
+
+entity Request keyed by id
+  id text
+  amount money above 0
+  order_total money above 0
+  days_since_delivery int at least 0
+  decision Decision is pending
+
+event RefundRequested with r Request
+event AgentReviewed with r Request
+  approve bool
+
+output PayRefund
+  request text
+  amount money
+
+output NotifyCustomer
+  request text
+  message text
+
+output AssignHuman
+  request text
+
+machine Request.decision
+  pending to approved or denied or escalated
+  escalated to approved or denied
+  approved to final
+  denied to final
+
+on RefundRequested with r if r.decision is pending
+  rule too_late
+    when r.days_since_delivery above window_days
+    set r.decision to denied
+    emit NotifyCustomer with request r.id message "Outside the return window"
+  rule auto_approve
+    when r.amount below auto_limit and r.amount below r.order_total
+    set r.decision to approved
+    emit PayRefund with request r.id amount r.amount
+  rule needs_human
+    otherwise
+    set r.decision to escalated
+    emit AssignHuman with request r.id
+
+on AgentReviewed with r approve if r.decision is escalated
+  rule human_approve
+    when approve and r.amount below r.order_total
+    set r.decision to approved
+    emit PayRefund with request r.id amount r.amount
+  rule human_deny
+    when not approve
+    set r.decision to denied
+    emit NotifyCustomer with request r.id message "Refund declined"
+  rule over_total
+    otherwise
+    reject "Refund exceeds order total"
+
+invariant never_overpay
+  for each r in Request r.decision is not approved or r.amount below r.order_total
+
+limit PayRefund at most 1 per request
+
+test small_refund_is_auto_approved
+  given Request id "R1" amount 30 order_total 80 days_since_delivery 5
+  send RefundRequested with r "R1"
+  expect Request at "R1" decision is approved
+  expect emitted PayRefund with request "R1" amount 30
+
+test cheap_but_above_total_goes_to_a_person
+  given Request id "R2" amount 40 order_total 30 days_since_delivery 5
+  send RefundRequested with r "R2"
+  expect Request at "R2" decision is escalated
+  expect emitted AssignHuman with request "R2"
+
+test person_cannot_overpay
+  given Request id "R4" amount 70 order_total 40 days_since_delivery 5 decision escalated
+  send AgentReviewed with r "R4" approve true
+  expect rejected "Refund exceeds order total"
+  expect Request at "R4" decision is escalated
+
+test too_late_is_denied
+  given Request id "R5" amount 10 order_total 100 days_since_delivery 40
+  send RefundRequested with r "R5"
+  expect Request at "R5" decision is denied
+  expect emitted NotifyCustomer with request "R5" message "Outside the return window"
+
+test human_approves_valid
+  given Request id "R6" amount 60 order_total 100 days_since_delivery 5 decision escalated
+  send AgentReviewed with r "R6" approve true
+  expect Request at "R6" decision is approved
+  expect emitted PayRefund with request "R6" amount 60
+
+test human_denies
+  given Request id "R7" amount 60 order_total 100 days_since_delivery 5 decision escalated
+  send AgentReviewed with r "R7" approve false
+  expect Request at "R7" decision is denied
+  expect emitted NotifyCustomer with request "R7" message "Refund declined"

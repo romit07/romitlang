@@ -1,0 +1,11 @@
+# PLANNED — Romit web UI layer (Stage 4)
+# This file is syntax documentation only; `romit check` will report it as planned/unsupported.
+#
+# ui spec CounterPage version 1
+#   view
+#     text count: int = 0
+#     button "+" on press -> send Increment()
+#   on Increment
+#     rule bump
+#       when true
+#       set count = count + 1
