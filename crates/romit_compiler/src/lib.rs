@@ -6,6 +6,7 @@ pub mod keywords;
 pub mod lexer;
 pub mod parser;
 pub mod replay;
+pub mod suggest;
 pub mod types;
 
 use check::{check_program, CheckedUnit};
@@ -127,7 +128,7 @@ pub fn run_source(
         }
         CheckedUnit::Spec(_) => Err(vec![Diagnostic::error(
             "E007",
-            "only scripts can run without a spec; start with `say` lines or use `romit test`",
+            "only scripts can run without a spec; start with `say` or `print` lines or use `romit test`",
             file,
             1,
             1,

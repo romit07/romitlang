@@ -14,3 +14,10 @@ equivalent to building the message from `"Hello "` and the value of `name`. The 
 ```
 
 Only one of these forms is required in source; this book uses `say "Hello" name` in examples.
+
+In scripts, you can also print several space-separated parts; they are concatenated in order:
+
+```text
+set total to 14
+say "Total: " total
+```

@@ -9,13 +9,18 @@
 | P003 | Dedent beyond outermost block |
 | P004 | Indent does not match a prior level |
 | P013 | Braces, brackets, parens, or `:` |
-| P020 | Expected indented block |
+| P010 | Unexpected `=` or character (use `set x to value` for assignment) |
+| P020 | Expected indented block or statement |
 | P021 | Expected a word |
 
 ## Type and rules (E1xx, E2xx)
 
 | Code | Summary |
 |------|---------|
+| E005 | Script mixed with spec declarations |
+| E006 | Empty script |
+| E107 | `say` or `print` value not printable |
+| E108 | Undefined script variable |
 | E199 | Test expectation failed at runtime |
 | E210 | Type or field error (checker) |
 | E402 | Rule never exercised by tests (coverage) |

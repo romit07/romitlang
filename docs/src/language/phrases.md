@@ -4,13 +4,26 @@ Romit expresses calls and control flow as **space-separated words** instead of p
 
 ## Calls and assignments
 
-Print from a script or rule:
+Print from a script or rule with **`say`** (shortest) or **`print`** (alias — same behavior, familiar from Python/Lua):
 
 ```text
 say "Hello, world!"
+print "Hello, world!"
 ```
 
-Emit events and pass fields with phrases:
+In a **script** (no `spec` header), assign locals and print them:
+
+```text
+set total to 3 times 4 plus 2
+say "Total: " total
+set x to x plus 1
+```
+
+Space-separated values after `say` are printed next to each other with no extra separators — useful for labels like `say "Total: " total`.
+
+Assignment always uses `set name to value`. Single `=` is not assignment (the compiler suggests `set x to value`).
+
+Emit events and pass fields with phrases in the spec layer:
 
 ```text
 emit Greet with message "Hi"

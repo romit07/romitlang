@@ -6,6 +6,8 @@ Create `hello.rmt`:
 say "Hello, world!"
 ```
 
+`print` works the same way (`print "Hello, world!"`). Romit keeps **`say`** as the shortest preferred form; **`print`** is an alias for beginners coming from Python or Lua.
+
 Run it:
 
 ```bash
@@ -40,4 +42,31 @@ test says_hello
 romit test examples/beginner/hello_world.rmt
 ```
 
-Use `say` scripts for the shortest programs; add a `spec` only when you want optional checks, invariants, and tests.
+Use `say` or `print` scripts for the shortest programs; add a `spec` only when you want optional checks, invariants, and tests.
+
+```bash
+romit run examples/beginner/print_alias.rmt
+```
+
+## Variables in scripts
+
+Assign with plain words (not `=`):
+
+```text
+set total to 3 times 4 plus 2
+say "Total: " total
+set x to 5
+set x to x plus 1
+say x
+```
+
+```bash
+romit run examples/beginner/variables.rmt
+```
+
+Expected output:
+
+```text
+Total: 14
+6
+```

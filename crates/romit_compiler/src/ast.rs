@@ -22,7 +22,15 @@ pub struct Script {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScriptStmt {
-    Say { value: Expr, span: Span },
+    Say {
+        parts: Vec<Expr>,
+        span: Span,
+    },
+    Set {
+        name: String,
+        value: Expr,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -188,7 +196,7 @@ pub enum Action {
         span: Span,
     },
     Say {
-        value: Expr,
+        parts: Vec<Expr>,
         span: Span,
     },
 }

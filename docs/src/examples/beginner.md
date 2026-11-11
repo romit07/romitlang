@@ -32,6 +32,37 @@ test says_hello
   expect emitted Greet with message "Hello, world!"
 ```
 
+## print_alias.rmt
+
+`print` is a full alias of `say` in scripts:
+
+```text
+print "Hi"
+set name to "Romit"
+print "Hello, " name
+say name
+```
+
+```bash
+romit run examples/beginner/print_alias.rmt
+```
+
+## variables.rmt
+
+Top-level script variables with `set` and `say`:
+
+```text
+set total to 3 times 4 plus 2
+say "Total: " total
+set x to 5
+set x to x plus 1
+say x
+```
+
+```bash
+romit run examples/beginner/variables.rmt
+```
+
 ## write_what_you_mean.rmt
 
 Used in [Why Romit](../why.md) — a long English prompt versus one runnable line:
