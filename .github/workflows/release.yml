@@ -1,0 +1,116 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.artifact_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: x86_64-unknown-linux-gnu
+            archive_ext: tar.gz
+            bin_name: romit
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            artifact_name: aarch64-unknown-linux-gnu
+            archive_ext: tar.gz
+            bin_name: romit
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: x86_64-apple-darwin
+            archive_ext: tar.gz
+            bin_name: romit
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: aarch64-apple-darwin
+            archive_ext: tar.gz
+            bin_name: romit
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: x86_64-pc-windows-msvc
+            archive_ext: zip
+            bin_name: romit.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release -p romit --target ${{ matrix.target }}
+
+      - name: Package (Unix)
+        if: matrix.archive_ext == 'tar.gz'
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          staging="romit-${version}-${{ matrix.artifact_name }}"
+          mkdir -p "dist/${staging}"
+          cp "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" "dist/${staging}/romit"
+          cp LICENSE README.md "dist/${staging}/"
+          tar -czf "romit-${version}-${{ matrix.artifact_name }}.tar.gz" -C "dist" "${staging}"
+
+      - name: Package (Windows)
+        if: matrix.archive_ext == 'zip'
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          staging="romit-${version}-${{ matrix.artifact_name }}"
+          mkdir -p "dist/${staging}"
+          cp "target/${{ matrix.target }}/release/${{ matrix.bin_name }}" "dist/${staging}/romit.exe"
+          cp LICENSE README.md "dist/${staging}/"
+          (cd dist && zip -r "../romit-${version}-${{ matrix.artifact_name }}.zip" "${staging}")
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.artifact_name }}
+          path: |
+            romit-*-${{ matrix.artifact_name }}.tar.gz
+            romit-*-${{ matrix.artifact_name }}.zip
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS
+        run: |
+          cd artifacts
+          shopt -s nullglob
+          files=(romit-*)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No release archives found"
+            exit 1
+          fi
+          sha256sum "${files[@]}" > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/*
+            artifacts/SHA256SUMS
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

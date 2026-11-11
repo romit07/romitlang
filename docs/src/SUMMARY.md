@@ -4,7 +4,10 @@
 
 # Getting started
 
-- [Install and first check](getting-started/install.md)
+- [Install](install.md)
+- [Linux quick start](getting-started/linux.md)
+- [macOS quick start](getting-started/macos.md)
+- [Windows quick start](getting-started/windows.md)
 - [Hello world](getting-started/hello.md)
 
 # Tutorials

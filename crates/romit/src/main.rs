@@ -3,13 +3,22 @@ use std::env;
 use std::fs;
 use std::process;
 
+fn print_usage() {
+    eprintln!("romit {}", env!("CARGO_PKG_VERSION"));
+    eprintln!("usage: romit [--version] check <file.rmt>");
+    eprintln!("       romit test <file.rmt>");
+}
+
 fn main() {
     let mut args = env::args().skip(1);
     let Some(cmd) = args.next() else {
-        eprintln!("usage: romit check <file.rmt>");
-        eprintln!("       romit test <file.rmt>");
+        print_usage();
         process::exit(2);
     };
+    if cmd == "--version" || cmd == "-V" {
+        println!("romit {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
     match cmd.as_str() {
         "check" => {
             let mut skip_coverage = false;
@@ -42,6 +51,7 @@ fn main() {
         }
         _ => {
             eprintln!("unknown command: {}", cmd);
+            print_usage();
             process::exit(2);
         }
     }

@@ -21,3 +21,32 @@ jobs:
           for f in examples/beginner/*.rmt; do
             ./target/release/romit test "$f"
           done
+
+  install-script-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - run: shellcheck install.sh
+      - run: ./scripts/test_install.sh
+
+  install-script-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install shellcheck
+        run: brew install shellcheck
+      - run: shellcheck install.sh
+      - run: ./scripts/test_install.sh
+
+  mdbook:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo install mdbook --locked
+      - run: cp install.sh install.ps1 docs/src/
+      - run: mdbook build docs
+      - run: test -f docs/book/install.sh && test -f docs/book/install.ps1
