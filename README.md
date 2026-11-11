@@ -4,9 +4,9 @@
 
 **Write what you mean. Ship it.**
 
-Romit is a general-purpose compiled language (`.rmt` files, `romit` CLI) aimed at the **shortest possible code** — short plain statements, indentation only, no braces, brackets, or parentheses. It reads almost like an AI prompt, but it runs. An optional spec layer adds rules, state machines, invariants, and tests when you want checks.
+Romit is a general-purpose compiled language (`.rmt` files, `romit` CLI) aimed at **shorter code, where the compiler fills in sensible defaults** — short plain statements, indentation only, no braces, brackets, or parentheses. It reads almost like an AI prompt, but it runs. An optional spec layer adds rules, state machines, invariants, and tests when you want checks.
 
-This repository contains the Stage 0–1 compiler (implemented in Rust), examples, a home page, browser playground, and [mdBook](https://rust-lang.github.io/mdBook/) documentation.
+This repository contains the Stage 0–1 compiler (implemented in Rust), the Romit UI MVP (`use ui`, `romit build`), examples, a home page, browser playground, and [mdBook](https://rust-lang.github.io/mdBook/) documentation.
 
 Current release line: **v0.0.1**
 
@@ -48,6 +48,7 @@ cargo build --release
 ```bash
 romit run examples/beginner/write_what_you_mean.rmt
 romit test examples/beginner/hello_world.rmt
+romit build examples/ui/landing.rmt
 ```
 
 ## Examples
@@ -56,7 +57,8 @@ romit test examples/beginner/hello_world.rmt
 |-----------|-------------|
 | `examples/beginner/` | Start here — scripts and optional specs |
 | `examples/advanced/` | Larger spec programs (brace-free); use `romit check --no-coverage` |
-| `examples/planned/` | Future UI syntax (`landing-dark.rmt`) |
+| `examples/ui/` | Romit UI pages (`romit build`) |
+| `examples/planned/` | Future reactive UI syntax |
 | `examples/negative/` | Parser diagnostics (**P013**, **P001**, …) |
 
 ## Documentation

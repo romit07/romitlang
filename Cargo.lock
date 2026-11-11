@@ -159,10 +159,15 @@ name = "romit"
 version = "0.0.1"
 dependencies = [
  "romit_compiler",
+ "romit_ui",
 ]
 
 [[package]]
 name = "romit_compiler"
+version = "0.0.1"
+
+[[package]]
+name = "romit_ui"
 version = "0.0.1"
 
 [[package]]

@@ -1,13 +1,19 @@
 [workspace]
 resolver = "2"
-members = ["crates/romit", "crates/romit_compiler", "crates/romit_wasm"]
+members = [
+    "crates/romit",
+    "crates/romit_compiler",
+    "crates/romit_ui",
+    "crates/romit_wasm",
+]
 
 [workspace.package]
 version = "0.0.1"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/romit07/romitlang"
-description = "Romit — general-purpose language with the shortest prompt-like code"
+description = "Romit — shorter code, where the compiler fills in sensible defaults"
 
 [workspace.dependencies]
 romit_compiler = { path = "crates/romit_compiler" }
+romit_ui = { path = "crates/romit_ui" }

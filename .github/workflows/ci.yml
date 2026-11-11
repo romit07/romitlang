@@ -20,6 +20,9 @@ jobs:
       - run: cargo build --release
       - run: |
           ./target/release/romit run examples/beginner/hello.rmt
+          ./target/release/romit build examples/ui/landing.rmt
+          test -f examples/ui/dist/index.html
+          test -f examples/ui/dist/style.css
           for f in examples/beginner/*.rmt; do
             case "$f" in
               */hello.rmt) continue ;;

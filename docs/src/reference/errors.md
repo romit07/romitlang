@@ -25,6 +25,17 @@
 | E210 | Type or field error (checker) |
 | E402 | Rule never exercised by tests (coverage) |
 
+## UI framework (U0xx)
+
+| Code | Summary |
+|------|---------|
+| U001 | Unknown UI part (lists valid parts) |
+| U002 | UI file must use `use ui` or valid `use template` |
+| U003 | Page declaration missing or duplicate |
+| U006 | Unknown theme token (lists valid tokens) |
+| U007 | Custom template file invalid or unreadable |
+| U008 | Cannot write build output |
+
 ## Warnings (W4xx)
 
 | Code | Summary |

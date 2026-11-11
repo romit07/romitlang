@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Romit CLI — run, check, and test .rmt programs"
+description = "Romit CLI — run, check, test, and build .rmt programs"
 
 [[bin]]
 name = "romit"
@@ -12,3 +12,4 @@ path = "src/main.rs"
 
 [dependencies]
 romit_compiler.workspace = true
+romit_ui.workspace = true

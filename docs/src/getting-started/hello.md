@@ -6,7 +6,7 @@ Create `hello.rmt`:
 say "Hello, world!"
 ```
 
-`print` works the same way (`print "Hello, world!"`). Romit keeps **`say`** as the shortest preferred form; **`print`** is an alias for beginners coming from Python or Lua.
+`print` works the same way (`print "Hello, world!"`). Romit keeps **`say`** as the preferred short form; **`print`** is an alias for beginners coming from Python or Lua.
 
 Run it:
 
@@ -42,7 +42,7 @@ test says_hello
 romit test examples/beginner/hello_world.rmt
 ```
 
-Use `say` or `print` scripts for the shortest programs; add a `spec` only when you want optional checks, invariants, and tests.
+Use `say` or `print` scripts for small programs; add a `spec` only when you want optional checks, invariants, and tests.
 
 ```bash
 romit run examples/beginner/print_alias.rmt
@@ -70,3 +70,5 @@ Expected output:
 Total: 14
 6
 ```
+
+For a landing page, see [UI framework](../ui-framework.md) and `examples/ui/landing.rmt` — the compiler fills in layout and theme defaults.

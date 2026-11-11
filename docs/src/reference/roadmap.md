@@ -1,11 +1,11 @@
 # Roadmap
 
-**Goal:** a general-purpose compiled language with the **shortest possible code** — prompt-like readability, sensible defaults, and one `romit` tool — growing from tiny scripts and optional spec checks toward full applications, native compilation, and a built-in web UI layer.
+**Goal:** a general-purpose compiled language with **shorter code, where the compiler fills in sensible defaults** — prompt-like readability and one `romit` tool — growing from tiny scripts and optional spec checks toward full applications, native compilation, and a built-in web UI layer.
 
 1. **Stage 1 (current)** — Scripts with `say`, optional spec layer, lexer, parser, checker, tests, mdBook docs, release binaries and install scripts.
 2. **Stage 2** — Functions, richer expressions, replay tooling.
 3. **Stage 3** — Entities and machines at full fidelity in the interpreter.
-4. **Stage 4** — UI `app` / `screen` / `view` layer ([UI framework](../ui-framework.md), `examples/planned/`).
+4. **Stage 4** — Romit UI: **MVP shipped** (`use ui`, `romit build`, static HTML/CSS); reactive apps and `app` / `screen` syntax still planned ([UI framework](../ui-framework.md), `examples/planned/`).
 
 ## Distribution (planned)
 

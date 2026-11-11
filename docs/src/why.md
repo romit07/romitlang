@@ -1,6 +1,6 @@
 # Why Romit
 
-Romit is a **general-purpose compiled language** whose goal is the **shortest possible code** — short plain statements, indentation only, no braces, brackets, or parentheses, with sensible defaults so you state intent instead of boilerplate. It is meant to read almost like an AI prompt, but it runs.
+Romit is a **general-purpose compiled language** whose goal is **shorter code, where the compiler fills in sensible defaults** — short plain statements, indentation only, no braces, brackets, or parentheses, so you state intent instead of boilerplate. It is meant to read almost like an AI prompt, but it runs.
 
 ## The problem with prompting today
 
@@ -19,7 +19,7 @@ Romit is a **tiny readable language between a prompt and a program**. You — or
 
 When you **want** extra safety, you can add an optional **spec layer**: state, events, rules, state machines, invariants, and tests — checked before run. That layer is there when you need it; it is not what Romit is “about” day to day.
 
-**Planned:** a simple memory model, built-in web UI and API framework, and native compilation — see [UI framework](ui-framework.md), `examples/planned/`, and the [roadmap](reference/roadmap.md).
+**Romit UI** (`use ui`, `romit build`) ships an MVP for static pages today; reactive apps and APIs remain **planned** — see [UI framework](ui-framework.md), `examples/planned/`, and the [roadmap](reference/roadmap.md).
 
 ## Before and after
 
@@ -56,7 +56,7 @@ test says_hello
   expect emitted Greet with message "Hello from Romit"
 ```
 
-See `examples/beginner/hello_world.rmt` and run `romit test` on that file. Do not mix `say` scripts and `spec` in one file.
+See `examples/beginner/hello_world.rmt` and run `romit test` on that file. Do not mix `say` scripts and `spec` in one file. UI pages use `use ui` in separate files.
 
 ## Reads like a prompt
 
@@ -68,11 +68,11 @@ An assistant edits **very little source**; you run `romit run` or `romit test`. 
 
 ## Memory and apps
 
-The target memory model is **value semantics with automatic reference counting** — **planned**. A **built-in app framework** for web UI and backend APIs is **planned**.
+The target memory model is **value semantics with automatic reference counting** — **planned**. **Romit UI** (separate from the core language) builds static pages with `romit build` today; reactive screens and backend APIs remain **planned**.
 
 ## One tool
 
-The `romit` binary **run**s scripts, **check**s and **test**s specs when you use that layer. One compiler, one workflow.
+The `romit` binary **run**s scripts, **check**s and **test**s specs when you use that layer, **build**s UI pages, and previews them locally. One compiler, one workflow.
 
 ## Capability snapshot (honest)
 
@@ -83,7 +83,7 @@ The `romit` binary **run**s scripts, **check**s and **test**s specs when you use
 | Optional spec layer: rules, machines, invariants, tests | Stage 0–1 | Broader runtime coverage |
 | Catch contradictory specs early | Where implemented in checker | Stricter coverage |
 | Interpreter | Yes | AOT compiler and native binaries |
-| Built-in web UI and API framework | Not in compiler | `examples/planned/` |
+| Static web UI (`romit build`) | MVP | Reactive UI and APIs |
 | Single `romit` tool | Yes | Same |
 
-**Today:** Romit is strongest for **minimal scripts** and **small spec programs** with tests. Larger apps, native compilation, and the UI layer are **planned**.
+**Today:** Romit is strongest for **minimal scripts** and **small spec programs** with tests, plus **static UI pages**. Larger apps, native compilation, and reactive UI are **planned**.
