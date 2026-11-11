@@ -1,11 +1,19 @@
-# PLANNED — Romit web UI layer (Stage 4)
-# This file is syntax documentation only; `romit check` will report it as planned/unsupported.
-#
-# ui spec CounterPage version 1
-#   view
-#     text count: int = 0
-#     button "+" on press -> send Increment()
-#   on Increment
-#     rule bump
-#       when true
-#       set count = count + 1
+note PLANNED — Romit UI framework (Stage 4). Not parsed by the Stage 1 compiler.
+note Counter demo: reactive state, text, and a plus button.
+
+app CounterDemo
+  screen Counter at /counter
+    state
+      count int is 0
+    column
+      padding 24
+      gap 16
+      align center
+      text count
+        size 48
+        bold
+      button "+"
+        size 32
+        on click increment
+    on click increment
+      set count to count plus 1

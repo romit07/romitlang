@@ -1,6 +1,8 @@
 # Planned UI syntax
 
-The file `examples/planned/landing-dark.rmt` shows a future **app / screen** layer (not parsed by the Stage 1 compiler):
+See the full design draft: **[UI framework](../ui-framework.md)** (planned, not implemented).
+
+The file `examples/planned/counter_ui.rmt` is the smallest interactive demo—state, a `text` bound to `count`, and a `"+"` button. `examples/planned/landing-dark.rmt` shows a richer **app / screen** layout (not parsed by the Stage 1 compiler):
 
 ```text
 app Landing
