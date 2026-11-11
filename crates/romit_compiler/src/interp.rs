@@ -1,7 +1,8 @@
 use crate::ast::*;
-use crate::check::CheckedProgram;
+use crate::check::{CheckedProgram, CheckedScript};
 use crate::diag::{snippet_at, Diagnostic};
 use std::collections::HashMap;
+use std::fmt::Write as _;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -187,6 +188,14 @@ impl Interpreter {
                                 outputs: vec![],
                                 rejected: Some(message.clone()),
                                 fired_rules: fired,
+                            });
+                        }
+                        Action::Say { value, .. } => {
+                            let v = self.eval_expr(&handler_state, value, &env);
+                            let text = format_say_value(&v, &env);
+                            outputs.push(OutputRecord {
+                                name: "__say__".into(),
+                                args: vec![Value::Text(text)],
                             });
                         }
                     }
@@ -806,4 +815,125 @@ fn div_values(l: &Value, r: &Value) -> Value {
         return Value::Null;
     }
     Value::Int(to_i64(l) / b)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunOutcome {
+    pub stdout: String,
+    pub steps: u64,
+}
+
+pub struct ScriptInterpreter {
+    script: CheckedScript,
+}
+
+impl ScriptInterpreter {
+    pub fn new(script: CheckedScript) -> Self {
+        Self { script }
+    }
+
+    pub fn run_with_limits(
+        &self,
+        file: &str,
+        source: &str,
+        max_steps: u64,
+    ) -> Result<RunOutcome, Vec<Diagnostic>> {
+        let rt = RuntimeState {
+            config: HashMap::new(),
+            state: HashMap::new(),
+            entities: HashMap::new(),
+        };
+        let env = Env::default();
+        let mut out = String::new();
+        let mut steps = 0u64;
+        for stmt in &self.script.script.stmts {
+            if let ScriptStmt::Say { value, span } = stmt {
+                steps += 1;
+                if steps > max_steps {
+                    return Err(vec![Diagnostic::error(
+                        "E900",
+                        format!("execution step limit ({max_steps}) exceeded"),
+                        file,
+                        span.line,
+                        span.column,
+                        snippet_at(source, span.line, span.column, "say"),
+                    )]);
+                }
+                let v = eval_script_expr(&rt, value, &env);
+                let line = format_say_value(&v, &env);
+                writeln!(out, "{line}").ok();
+            }
+        }
+        Ok(RunOutcome { stdout: out, steps })
+    }
+}
+
+fn eval_script_expr(rt: &RuntimeState, expr: &Expr, env: &Env) -> Value {
+    match expr {
+        Expr::Literal(l, _) => literal_to_value(l),
+        Expr::Path(p, _) => {
+            if p.parts.len() == 1 {
+                let n = &p.parts[0];
+                if let Some(v) = env.locals.get(n) {
+                    return v.clone();
+                }
+                if let Some(v) = rt.state.get(n) {
+                    return v.clone();
+                }
+            }
+            Value::Null
+        }
+        Expr::Binary {
+            op, left, right, ..
+        } => {
+            let l = eval_script_expr(rt, left, env);
+            let r = eval_script_expr(rt, right, env);
+            eval_binary(op, &l, &r)
+        }
+        Expr::Unary { op, expr, .. } => {
+            let e = eval_script_expr(rt, expr, env);
+            match op {
+                UnaryOp::Not => Value::Bool(!truthy(&e)),
+                UnaryOp::Neg => neg_value(e),
+            }
+        }
+        _ => Value::Null,
+    }
+}
+
+pub fn value_to_display(v: &Value) -> String {
+    match v {
+        Value::Text(s) => s.clone(),
+        Value::Int(n) => n.to_string(),
+        Value::Money(m) => m.to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Enum(s) => s.clone(),
+        Value::Null => "null".into(),
+    }
+}
+
+fn format_say_value(v: &Value, env: &Env) -> String {
+    let mut text = value_to_display(v);
+    if let Value::Text(s) = v {
+        text = interpolate_say_string(s, env);
+    }
+    text
+}
+
+fn interpolate_say_string(s: &str, env: &Env) -> String {
+    if let Some(idx) = s.rfind(", ") {
+        let ident = s[idx + 2..].trim();
+        if !ident.is_empty()
+            && ident.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+            && !ident.chars().next().is_some_and(|c| c.is_ascii_digit())
+        {
+            if let Some(v) = env.locals.get(ident) {
+                return format!("{}{}", &s[..idx + 2], value_to_display(v));
+            }
+            if let Some(v) = env.field(ident, ident) {
+                return format!("{}{}", &s[..idx + 2], value_to_display(&v));
+            }
+        }
+    }
+    s.to_string()
 }

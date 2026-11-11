@@ -15,10 +15,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo install mdbook --locked
-      - run: cp install.sh install.ps1 docs/src/
-      - run: mdbook build docs
-      - run: test -f docs/book/install.sh && test -f docs/book/install.ps1
+        with:
+          targets: wasm32-unknown-unknown
+      - run: cargo install mdbook wasm-bindgen-cli --locked
+      - run: ./scripts/build_site.sh
+      - run: SKIP_SITE_BUILD=1 ./scripts/verify_site.sh
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

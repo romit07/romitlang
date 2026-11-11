@@ -1,0 +1,90 @@
+.playground-layout {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 960px) {
+  .playground-layout {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .pg-editor-wrap {
+    grid-row: span 2;
+  }
+}
+
+.pg-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.pg-editor-wrap {
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: var(--bg-elevated);
+  display: grid;
+  grid-template-columns: 2.5rem 1fr;
+  min-height: 16rem;
+}
+
+.line-nums {
+  padding: 0.75rem 0.35rem;
+  text-align: right;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  background: var(--code-bg);
+  user-select: none;
+  overflow: hidden;
+}
+
+#editor {
+  border: 0;
+  resize: vertical;
+  min-height: 16rem;
+  padding: 0.75rem;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  background: transparent;
+  color: var(--text);
+  width: 100%;
+}
+
+#editor:focus {
+  outline: none;
+}
+
+.pg-output {
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  min-height: 8rem;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  background: var(--code-bg);
+}
+
+.pg-output.error {
+  color: #b3261e;
+}
+
+.pg-examples select {
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.pg-status {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}

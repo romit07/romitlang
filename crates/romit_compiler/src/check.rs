@@ -4,6 +4,30 @@ use crate::types::{type_from_ast, RomitType};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone)]
+pub struct CheckedScript {
+    pub script: Script,
+}
+
+#[derive(Clone)]
+pub enum CheckedUnit {
+    Spec(CheckedProgram),
+    Script(CheckedScript),
+}
+
+impl CheckedUnit {
+    pub fn as_spec(&self) -> Option<&CheckedProgram> {
+        match self {
+            CheckedUnit::Spec(p) => Some(p),
+            CheckedUnit::Script(_) => None,
+        }
+    }
+
+    pub fn is_script(&self) -> bool {
+        matches!(self, CheckedUnit::Script(_))
+    }
+}
+
+#[derive(Clone)]
 pub struct CheckedProgram {
     pub spec: Spec,
     pub enums: HashMap<String, Vec<String>>,
@@ -18,6 +42,62 @@ pub struct CheckedProgram {
     pub invariants: Vec<InvariantDecl>,
     pub limits: Vec<LimitDecl>,
     pub tests: Vec<TestDecl>,
+}
+
+pub fn check_program(
+    program: Program,
+    file: &str,
+    source: &str,
+) -> Result<CheckedUnit, Vec<Diagnostic>> {
+    match program {
+        Program::Spec(spec) => check(spec, file, source).map(CheckedUnit::Spec),
+        Program::Script(script) => check_script(script, file, source).map(CheckedUnit::Script),
+    }
+}
+
+pub fn check_script(
+    script: Script,
+    file: &str,
+    source: &str,
+) -> Result<CheckedScript, Vec<Diagnostic>> {
+    let mut diags = Vec::new();
+    if script.stmts.is_empty() {
+        diags.push(Diagnostic::error(
+            "E006",
+            "script is empty; add at least one `say` line",
+            file,
+            script.span.line,
+            script.span.column,
+            snippet_at(source, script.span.line, script.span.column, "script"),
+        ));
+    }
+    for stmt in &script.stmts {
+        if let ScriptStmt::Say { value, span } = stmt {
+            if !expr_is_printable(value) {
+                diags.push(type_err(
+                    file,
+                    source,
+                    span,
+                    "E107",
+                    "`say` needs a text, number, or boolean value".into(),
+                ));
+            }
+        }
+    }
+    if diags
+        .iter()
+        .any(|d| d.severity == crate::diag::Severity::Error)
+    {
+        return Err(diags);
+    }
+    Ok(CheckedScript { script })
+}
+
+fn expr_is_printable(expr: &Expr) -> bool {
+    match expr {
+        Expr::Literal(_, _) | Expr::Path(_, _) | Expr::Binary { .. } | Expr::Unary { .. } => true,
+        _ => false,
+    }
 }
 
 pub fn check(spec: Spec, file: &str, source: &str) -> Result<CheckedProgram, Vec<Diagnostic>> {

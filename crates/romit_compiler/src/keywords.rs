@@ -26,6 +26,7 @@ pub fn is_keyword(word: &str) -> bool {
             | "set"
             | "to"
             | "emit"
+            | "say"
             | "with"
             | "reject"
             | "invariant"

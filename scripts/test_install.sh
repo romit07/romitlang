@@ -24,7 +24,7 @@ if [ "$DETECTED" != "$TARGET" ]; then
   exit 1
 fi
 
-VERSION="0.1.0-test"
+VERSION="0.0.1-test"
 ARCHIVE="romit-${VERSION}-${TARGET}.tar.gz"
 STAGING="${ROOT}/.install-test-dist"
 INSTALL_ROOT="${ROOT}/.install-test-home"

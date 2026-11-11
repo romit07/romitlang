@@ -12,7 +12,7 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn parse_file(file: &str, source: &str) -> Result<Spec, Vec<Diagnostic>> {
+    pub fn parse_file(file: &str, source: &str) -> Result<Program, Vec<Diagnostic>> {
         let mut lexer = Lexer::new(source.to_string());
         let tokens = match lexer.tokenize(file) {
             Ok(t) => t,
@@ -28,14 +28,62 @@ impl Parser {
             pos: 0,
             errors: Vec::new(),
         };
-        match p.parse_spec() {
-            Ok(spec) if p.errors.is_empty() => Ok(spec),
+        p.skip_newlines();
+        let is_spec = matches!(p.peek().kind, TokenKind::Ident(ref s) if s == "spec");
+        let result = if is_spec {
+            p.parse_spec().map(Program::Spec)
+        } else {
+            p.parse_script().map(Program::Script)
+        };
+        match result {
+            Ok(prog) if p.errors.is_empty() => Ok(prog),
             Ok(_) => Err(p.errors),
             Err(e) => {
                 p.errors.push(e);
                 Err(p.errors)
             }
         }
+    }
+
+    fn parse_script(&mut self) -> Result<Script, Diagnostic> {
+        let span = self.span();
+        let mut stmts = Vec::new();
+        while !matches!(self.peek().kind, TokenKind::Eof) {
+            self.skip_top_level();
+            if matches!(self.peek().kind, TokenKind::Eof) {
+                break;
+            }
+            if let TokenKind::Ident(ref w) = self.peek().kind {
+                if script_conflicts_with_spec(w) {
+                    return Err(Diagnostic::error(
+                        "E005",
+                        "a script cannot mix top-level statements with spec declarations (use one style per file)",
+                        &self.file,
+                        self.peek().line,
+                        self.peek().column,
+                        snippet_at(
+                            &self.source,
+                            self.peek().line,
+                            self.peek().column,
+                            w,
+                        ),
+                    )
+                    .with_help("use only `say` lines, or start the file with `spec` for declarative programs"));
+                }
+            }
+            if self.peek_word() != Some("say".into()) {
+                return Err(self.err_here("'say' statement"));
+            }
+            let stmt_span = self.span();
+            self.bump();
+            let value = self.parse_expr_until_line()?;
+            self.skip_newlines();
+            stmts.push(ScriptStmt::Say {
+                value,
+                span: stmt_span,
+            });
+        }
+        Ok(Script { stmts, span })
     }
 
     fn span(&self) -> Span {
@@ -658,7 +706,11 @@ impl Parser {
                 };
                 Ok(Action::Reject { message: msg, span })
             }
-            _ => Err(self.err_here("set, emit, or reject")),
+            "say" => {
+                let value = self.parse_expr_until_line()?;
+                Ok(Action::Say { value, span })
+            }
+            _ => Err(self.err_here("set, emit, say, or reject")),
         }
     }
 
@@ -1423,4 +1475,23 @@ fn map_compare(op: &str) -> CompareOp {
         "at" => CompareOp::Ge,
         _ => CompareOp::Gt,
     }
+}
+
+fn script_conflicts_with_spec(word: &str) -> bool {
+    matches!(
+        word,
+        "spec"
+            | "enum"
+            | "config"
+            | "state"
+            | "entity"
+            | "event"
+            | "output"
+            | "define"
+            | "machine"
+            | "on"
+            | "invariant"
+            | "limit"
+            | "test"
+    )
 }

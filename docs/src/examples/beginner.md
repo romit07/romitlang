@@ -1,9 +1,14 @@
 # Beginner programs
 
-These programs live in the repository under `examples/beginner/`. Run any file with:
+These programs live in the repository under `examples/beginner/`.
+
+- Scripts: `romit run examples/beginner/hello.rmt`
+- Specs with tests: `romit test examples/beginner/<name>.rmt`
+
+## hello.rmt
 
 ```text
-romit test examples/beginner/<name>.rmt
+say "Hello, world!"
 ```
 
 ## hello_world.rmt

@@ -4,6 +4,12 @@ Romit expresses calls and control flow as **space-separated words** instead of p
 
 ## Calls and assignments
 
+Print from a script or rule:
+
+```text
+say "Hello, world!"
+```
+
 Emit events and pass fields with phrases:
 
 ```text
