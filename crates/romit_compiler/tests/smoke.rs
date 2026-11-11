@@ -115,13 +115,55 @@ fn script_undefined_variable() {
 }
 
 #[test]
-fn script_rejects_equals_assignment() {
-    let src = "x = 5\nsay x";
-    let r = Parser::parse_file("eq.rmt", src);
+fn run_script_assign_equals() {
+    let src = include_str!("../../../examples/beginner/assign_equals.rmt");
+    let out = romit_compiler::run_source(src, "assign_equals.rmt", 1000).unwrap();
+    assert_eq!(out.stdout.trim(), "Hi Ada\nTotal: 14\n6");
+}
+
+#[test]
+fn lexer_tokenizes_tight_equals() {
+    let src = "x=5\n";
+    let mut lex = Lexer::new(src.to_string());
+    let tokens = lex.tokenize("tight.rmt").unwrap();
+    let kinds: Vec<_> = tokens
+        .iter()
+        .filter(|t| {
+            !matches!(
+                t.kind,
+                romit_compiler::lexer::TokenKind::Newline | romit_compiler::lexer::TokenKind::Eof
+            )
+        })
+        .map(|t| format!("{:?}", t.kind))
+        .collect();
+    assert_eq!(kinds, ["Ident(\"x\")", "Assign", "Int(5)"]);
+}
+
+#[test]
+fn script_rejects_equals_in_expression() {
+    let src = "say x = 5\n";
+    let r = Parser::parse_file("eq_expr.rmt", src);
     assert!(r.is_err());
     let msgs = romit_compiler::format_diagnostics(&r.unwrap_err());
     assert!(msgs.contains("P010"));
-    assert!(msgs.contains("set x to value"));
+    assert!(msgs.contains("is") || msgs.contains("=="));
+}
+
+#[test]
+fn script_condition_rejects_lone_equals() {
+    let src = r#"spec S version 1
+state
+  x int is 0
+event E
+on E
+  rule r
+    when x = 5
+    set x to 5
+"#;
+    let r = Parser::parse_file("eq_when.rmt", src);
+    assert!(r.is_err());
+    let msgs = romit_compiler::format_diagnostics(&r.unwrap_err());
+    assert!(msgs.contains("P010"));
 }
 
 #[test]

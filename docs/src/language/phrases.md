@@ -21,7 +21,9 @@ set x to x plus 1
 
 Space-separated values after `say` are printed next to each other with no extra separators — useful for labels like `say "Total: " total`.
 
-Assignment always uses `set name to value`. Single `=` is not assignment (the compiler suggests `set x to value`).
+At the **start of a script line**, assign with `name = value` (short form) or `set name to value` (readable form). Both are equivalent; `x=5` and `x = 5` both work.
+
+Inside a **condition** or expression, lone `=` is still an error — use `is`, `is not`, or `==` for comparison.
 
 Emit events and pass fields with phrases in the spec layer:
 
