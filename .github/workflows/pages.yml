@@ -16,7 +16,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo install mdbook --locked
+      - run: cp install.sh install.ps1 docs/src/
       - run: mdbook build docs
+      - run: test -f docs/book/install.sh && test -f docs/book/install.ps1
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

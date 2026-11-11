@@ -21,5 +21,6 @@ test says_hello
 Run:
 
 ```bash
+romit check examples/beginner/hello_world.rmt
 romit test examples/beginner/hello_world.rmt
 ```

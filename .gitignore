@@ -1,2 +1,6 @@
 /target/
 docs/book/
+docs/src/install.sh
+docs/src/install.ps1
+.install-test-dist/
+.install-test-home/
