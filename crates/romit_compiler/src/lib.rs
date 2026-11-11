@@ -18,7 +18,11 @@ pub struct CompileResult {
     pub warnings: Vec<Diagnostic>,
 }
 
-pub fn compile_file(file: &str, source: &str, skip_coverage: bool) -> Result<CompileResult, Vec<Diagnostic>> {
+pub fn compile_file(
+    file: &str,
+    source: &str,
+    skip_coverage: bool,
+) -> Result<CompileResult, Vec<Diagnostic>> {
     let spec = match Parser::parse_file(file, source) {
         Ok(s) => s,
         Err(e) => return Err(e),
@@ -43,10 +47,7 @@ pub fn compile_file(file: &str, source: &str, skip_coverage: bool) -> Result<Com
                 if let crate::ast::TestStep::Send(send) = step {
                     let mut args = std::collections::HashMap::new();
                     for (k, e) in &send.args {
-                        args.insert(
-                            k.clone(),
-                            interp.eval_expr(&rt, e, &interp::Env::default()),
-                        );
+                        args.insert(k.clone(), interp.eval_expr(&rt, e, &interp::Env::default()));
                     }
                     if let Ok(r) = interp.run_event(&mut rt, &send.event, &args) {
                         for fr in r.fired_rules {

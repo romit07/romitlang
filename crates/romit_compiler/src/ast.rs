@@ -156,9 +156,20 @@ pub enum RuleWhen {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
-    Set { path: PathExpr, value: Expr, span: Span },
-    Emit { name: String, args: Vec<Expr>, span: Span },
-    Reject { message: String, span: Span },
+    Set {
+        path: PathExpr,
+        value: Expr,
+        span: Span,
+    },
+    Emit {
+        name: String,
+        args: Vec<Expr>,
+        span: Span,
+    },
+    Reject {
+        message: String,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -213,10 +224,22 @@ pub struct Send {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expect {
-    Expr { expr: Expr, span: Span },
-    Emitted { output: String, args: Vec<Expr>, span: Span },
-    Rejected { message: String, span: Span },
-    NoOutputs { span: Span },
+    Expr {
+        expr: Expr,
+        span: Span,
+    },
+    Emitted {
+        output: String,
+        args: Vec<Expr>,
+        span: Span,
+    },
+    Rejected {
+        message: String,
+        span: Span,
+    },
+    NoOutputs {
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -229,9 +252,22 @@ pub enum Type {
 pub enum Expr {
     Literal(Literal, Span),
     Path(PathExpr, Span),
-    Call { name: String, args: Vec<Expr>, span: Span },
-    Unary { op: UnaryOp, expr: Box<Expr>, span: Span },
-    Binary { op: BinaryOp, left: Box<Expr>, right: Box<Expr>, span: Span },
+    Call {
+        name: String,
+        args: Vec<Expr>,
+        span: Span,
+    },
+    Unary {
+        op: UnaryOp,
+        expr: Box<Expr>,
+        span: Span,
+    },
+    Binary {
+        op: BinaryOp,
+        left: Box<Expr>,
+        right: Box<Expr>,
+        span: Span,
+    },
     If {
         cond: Box<Expr>,
         then_br: Box<Expr>,

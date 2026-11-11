@@ -12,7 +12,7 @@ fn tokenize_hello() {
 fn parses_hello() {
     let src = include_str!("../../../examples/beginner/hello_world.rmt");
     let r = Parser::parse_file("hello.rmt", src);
-  assert!(r.is_ok(), "{:?}", r.err());
+    assert!(r.is_ok(), "{:?}", r.err());
 }
 
 #[test]

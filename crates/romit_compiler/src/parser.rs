@@ -49,7 +49,9 @@ impl Parser {
     }
 
     fn peek(&self) -> &Token {
-        self.tokens.get(self.pos).unwrap_or_else(|| self.tokens.last().unwrap())
+        self.tokens
+            .get(self.pos)
+            .unwrap_or_else(|| self.tokens.last().unwrap())
     }
 
     fn bump(&mut self) -> Token {
@@ -182,14 +184,22 @@ impl Parser {
     }
 
     fn resync(&mut self) {
-        while !matches!(
-            self.peek().kind,
-            TokenKind::Eof
-        ) {
+        while !matches!(self.peek().kind, TokenKind::Eof) {
             if let TokenKind::Ident(ref s) = self.peek().kind {
                 if matches!(
                     s.as_str(),
-                    "enum" | "config" | "state" | "entity" | "event" | "output" | "define" | "machine" | "on" | "invariant" | "limit" | "test"
+                    "enum"
+                        | "config"
+                        | "state"
+                        | "entity"
+                        | "event"
+                        | "output"
+                        | "define"
+                        | "machine"
+                        | "on"
+                        | "invariant"
+                        | "limit"
+                        | "test"
                 ) {
                     break;
                 }
@@ -260,7 +270,12 @@ impl Parser {
         let span = self.span();
         let name = self.word()?;
         let mut variants = Vec::new();
-        while !self.at_newline() && !matches!(self.peek().kind, TokenKind::Eof | TokenKind::Dedent | TokenKind::Indent) {
+        while !self.at_newline()
+            && !matches!(
+                self.peek().kind,
+                TokenKind::Eof | TokenKind::Dedent | TokenKind::Indent
+            )
+        {
             let w = self.word()?;
             if w == "=" || w == "|" || w == "or" {
                 continue;
@@ -343,21 +358,21 @@ impl Parser {
         let mut stores = StoreMode::None;
         if self.peek_word() == Some("with".into()) {
             self.bump();
-                while !self.at_newline() {
-                    if let TokenKind::Ident(ref bw) = self.peek().kind {
-                        if bw == "and" {
-                            self.bump();
-                            continue;
-                        }
+            while !self.at_newline() {
+                if let TokenKind::Ident(ref bw) = self.peek().kind {
+                    if bw == "and" {
+                        self.bump();
+                        continue;
                     }
-                    let pname = self.word()?;
-                    let pty = Type::Named(self.word()?);
-                    params.push(Param {
-                        name: pname,
-                        ty: pty,
-                        span: self.span(),
-                    });
                 }
+                let pname = self.word()?;
+                let pty = Type::Named(self.word()?);
+                params.push(Param {
+                    name: pname,
+                    ty: pty,
+                    span: self.span(),
+                });
+            }
         }
         self.skip_newlines();
         if matches!(self.peek().kind, TokenKind::Indent) {
@@ -581,17 +596,20 @@ impl Parser {
             self.bump();
             RuleWhen::Otherwise
         } else {
-            return Err(
-                Diagnostic::error(
-                    "P012",
-                    "a rule needs a \"when\" or \"otherwise\" line first",
-                    &self.file,
+            return Err(Diagnostic::error(
+                "P012",
+                "a rule needs a \"when\" or \"otherwise\" line first",
+                &self.file,
+                self.peek().line,
+                self.peek().column,
+                snippet_at(
+                    &self.source,
                     self.peek().line,
                     self.peek().column,
-                    snippet_at(&self.source, self.peek().line, self.peek().column, "rule body"),
-                )
-                .with_help("add  when <condition>  on the first indented line"),
-            );
+                    "rule body",
+                ),
+            )
+            .with_help("add  when <condition>  on the first indented line"));
         };
         self.skip_newlines();
         let mut actions = Vec::new();
@@ -813,11 +831,7 @@ impl Parser {
                     }
                 }
             }
-            return Ok(Expect::Emitted {
-                output,
-                args,
-                span,
-            });
+            return Ok(Expect::Emitted { output, args, span });
         }
         if w == "rejected" {
             let msg = match self.bump().kind {
@@ -1387,7 +1401,11 @@ impl Parser {
         }
     }
 
-    fn parse_path_tail(&mut self, mut parts: Vec<String>, span: Span) -> Result<PathExpr, Diagnostic> {
+    fn parse_path_tail(
+        &mut self,
+        mut parts: Vec<String>,
+        span: Span,
+    ) -> Result<PathExpr, Diagnostic> {
         while matches!(self.peek().kind, TokenKind::Dot) {
             self.bump();
             parts.push(self.word()?);

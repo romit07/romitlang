@@ -71,11 +71,7 @@ impl fmt::Display for Diagnostic {
             Severity::Error => "error",
             Severity::Warning => "warning",
         };
-        writeln!(
-            f,
-            "{}[{}]: {}",
-            sev, self.code, self.message
-        )?;
+        writeln!(f, "{}[{}]: {}", sev, self.code, self.message)?;
         writeln!(f, "  --> {}:{}:{}", self.file, self.line, self.column)?;
         for line in self.snippet.lines() {
             writeln!(f, "   | {}", line)?;

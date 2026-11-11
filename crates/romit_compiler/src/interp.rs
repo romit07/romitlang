@@ -47,7 +47,10 @@ impl Interpreter {
                 entity_key.insert(e.name.clone(), e.key.clone());
             }
         }
-        Self { program, entity_key }
+        Self {
+            program,
+            entity_key,
+        }
     }
 
     pub fn init_from_spec(&self) -> RuntimeState {
@@ -81,7 +84,8 @@ impl Interpreter {
     pub fn apply_given(&self, rt: &mut RuntimeState, given: &Given) {
         match given {
             Given::StateAssign { name, value, .. } => {
-                rt.state.insert(name.clone(), self.eval_expr(rt, value, &Env::default()));
+                rt.state
+                    .insert(name.clone(), self.eval_expr(rt, value, &Env::default()));
             }
             Given::EntityInstance { entity, fields, .. } => {
                 let key_field = self
@@ -241,10 +245,7 @@ impl Interpreter {
                 Ok(())
             }
             StoreMode::Named(names) => {
-                let leg_key = event
-                    .params
-                    .first()
-                    .map(|p| p.name.clone());
+                let leg_key = event.params.first().map(|p| p.name.clone());
                 let entity = event.params.first().and_then(|p| {
                     if let Type::Named(e) = &p.ty {
                         Some(e.clone())
@@ -354,22 +355,34 @@ impl Interpreter {
                     UnaryOp::Neg => neg_value(v),
                 }
             }
-            Expr::Binary { op, left, right, .. } => {
+            Expr::Binary {
+                op, left, right, ..
+            } => {
                 let l = self.eval_expr(rt, left, env);
                 let r = self.eval_expr(rt, right, env);
                 eval_binary(op, &l, &r)
             }
-            Expr::If { cond, then_br, else_br, .. } => {
+            Expr::If {
+                cond,
+                then_br,
+                else_br,
+                ..
+            } => {
                 if truthy(&self.eval_expr(rt, cond, env)) {
                     self.eval_expr(rt, then_br, env)
                 } else {
                     self.eval_expr(rt, else_br, env)
                 }
             }
-            Expr::Aggregate { kind, entity, filter, .. } => {
-                self.eval_aggregate(rt, kind, entity, filter.as_deref(), env)
-            }
-            Expr::Index { entity, key, field, .. } => {
+            Expr::Aggregate {
+                kind,
+                entity,
+                filter,
+                ..
+            } => self.eval_aggregate(rt, kind, entity, filter.as_deref(), env),
+            Expr::Index {
+                entity, key, field, ..
+            } => {
                 let id = value_to_key(&self.eval_expr(rt, key, env));
                 rt.entities
                     .get(entity)
@@ -378,7 +391,9 @@ impl Interpreter {
                     .cloned()
                     .unwrap_or(Value::Null)
             }
-            Expr::ForEach { var, entity, body, .. } => {
+            Expr::ForEach {
+                var, entity, body, ..
+            } => {
                 let rows: Vec<_> = rt
                     .entities
                     .get(entity)

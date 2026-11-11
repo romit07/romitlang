@@ -162,7 +162,13 @@ impl Lexer {
                     }
                     at_line_start = true;
                     if self.peek().is_none() {
-                        flush_eof(&mut tokens, &mut self.pending_dedents, &mut self.indent_stack, self.line, self.column);
+                        flush_eof(
+                            &mut tokens,
+                            &mut self.pending_dedents,
+                            &mut self.indent_stack,
+                            self.line,
+                            self.column,
+                        );
                         tokens.push(Token {
                             kind: TokenKind::Eof,
                             line: self.line,
@@ -182,7 +188,13 @@ impl Lexer {
             let col = self.column;
 
             let Some(c) = self.peek() else {
-                flush_eof(&mut tokens, &mut self.pending_dedents, &mut self.indent_stack, line, col);
+                flush_eof(
+                    &mut tokens,
+                    &mut self.pending_dedents,
+                    &mut self.indent_stack,
+                    line,
+                    col,
+                );
                 tokens.push(Token {
                     kind: TokenKind::Eof,
                     line,
@@ -298,7 +310,8 @@ impl Lexer {
 
             if c.is_ascii_alphabetic() || c == '_' {
                 let mut w = String::new();
-                while matches!(self.peek(), Some(ch) if ch.is_ascii_alphanumeric() || ch == '_' || ch == '/') {
+                while matches!(self.peek(), Some(ch) if ch.is_ascii_alphanumeric() || ch == '_' || ch == '/')
+                {
                     w.push(self.bump().unwrap());
                 }
                 tokens.push(Token {
@@ -335,7 +348,14 @@ impl Lexer {
                         self.bump();
                         TokenKind::Ne
                     } else {
-                        return Err(brace_err(file, &self.source, line, col, "P010", "unexpected !"));
+                        return Err(brace_err(
+                            file,
+                            &self.source,
+                            line,
+                            col,
+                            "P010",
+                            "unexpected !",
+                        ));
                     }
                 }
                 '<' => {

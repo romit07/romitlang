@@ -218,7 +218,9 @@ pub fn check(spec: Spec, file: &str, source: &str) -> Result<CheckedProgram, Vec
         }
     }
 
-    let has_errors = diags.iter().any(|d| d.severity == crate::diag::Severity::Error);
+    let has_errors = diags
+        .iter()
+        .any(|d| d.severity == crate::diag::Severity::Error);
     if has_errors {
         return Err(diags);
     }
@@ -286,7 +288,10 @@ fn path_display(p: &PathExpr) -> String {
     p.parts.join(".")
 }
 
-fn find_machine_for_path<'a>(path: &PathExpr, machines: &'a HashMap<String, MachineDecl>) -> Option<&'a MachineDecl> {
+fn find_machine_for_path<'a>(
+    path: &PathExpr,
+    machines: &'a HashMap<String, MachineDecl>,
+) -> Option<&'a MachineDecl> {
     let key = path_key(path);
     machines.get(&key).or_else(|| {
         if path.parts.len() == 2 {
@@ -322,13 +327,15 @@ fn set_targets(actions: &[Action]) -> HashSet<String> {
 
 fn rule_covers(earlier: &RuleDecl, later: &RuleDecl) -> bool {
     matches!(earlier.when, RuleWhen::Otherwise)
-        || (matches!(later.when, RuleWhen::Expr(_))
-            && !matches!(earlier.when, RuleWhen::Otherwise))
-        && false
+        || (matches!(later.when, RuleWhen::Expr(_)) && !matches!(earlier.when, RuleWhen::Otherwise))
+            && false
 }
 
 fn is_obviously_unreachable(r: &RuleDecl) -> bool {
-    matches!(r.when, RuleWhen::Expr(Expr::Literal(Literal::Bool(false), _)))
+    matches!(
+        r.when,
+        RuleWhen::Expr(Expr::Literal(Literal::Bool(false), _))
+    )
 }
 
 fn find_risky_rule_for_invariant(
@@ -358,6 +365,10 @@ fn find_risky_rule_for_invariant(
     None
 }
 
-pub fn check_parse_only(file: &str, source: &str, spec: Spec) -> Result<CheckedProgram, Vec<Diagnostic>> {
+pub fn check_parse_only(
+    file: &str,
+    source: &str,
+    spec: Spec,
+) -> Result<CheckedProgram, Vec<Diagnostic>> {
     check(spec, file, source)
 }
