@@ -1,0 +1,7 @@
+fn double n
+  give n times 2
+
+function triple n
+  give n times 3
+
+say double 3, triple 4

@@ -1,0 +1,4 @@
+fn half n
+  say n
+
+say half 4

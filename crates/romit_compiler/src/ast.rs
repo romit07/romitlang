@@ -16,7 +16,44 @@ pub enum Program {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Script {
-    pub stmts: Vec<ScriptStmt>,
+    pub items: Vec<ScriptItem>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ScriptItem {
+    Fn(ScriptFn),
+    Stmt(ScriptStmt),
+}
+
+impl Script {
+    pub fn fns(&self) -> impl Iterator<Item = &ScriptFn> {
+        self.items.iter().filter_map(|it| match it {
+            ScriptItem::Fn(f) => Some(f),
+            ScriptItem::Stmt(_) => None,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScriptFn {
+    pub name: String,
+    pub params: Vec<ScriptParam>,
+    pub body: Vec<ScriptStmt>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScriptElif {
+    pub cond: Expr,
+    pub body: Vec<ScriptStmt>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScriptParam {
+    pub name: String,
+    pub default: Option<Expr>,
     pub span: Span,
 }
 
@@ -28,6 +65,34 @@ pub enum ScriptStmt {
     },
     Set {
         name: String,
+        value: Expr,
+        span: Span,
+    },
+    If {
+        cond: Expr,
+        body: Vec<ScriptStmt>,
+        elif: Vec<ScriptElif>,
+        else_body: Option<Vec<ScriptStmt>>,
+        span: Span,
+    },
+    Repeat {
+        count: Expr,
+        body: Vec<ScriptStmt>,
+        span: Span,
+    },
+    ForEachRange {
+        var: String,
+        from: Expr,
+        to: Expr,
+        body: Vec<ScriptStmt>,
+        span: Span,
+    },
+    While {
+        cond: Expr,
+        body: Vec<ScriptStmt>,
+        span: Span,
+    },
+    Give {
         value: Expr,
         span: Span,
     },
@@ -284,6 +349,7 @@ pub enum Expr {
     Call {
         name: String,
         args: Vec<Expr>,
+        named: Vec<NamedArg>,
         span: Span,
     },
     Unary {
@@ -354,7 +420,15 @@ pub enum BinaryOp {
     Sub,
     Mul,
     Div,
+    Mod,
     In,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NamedArg {
+    pub name: String,
+    pub value: Expr,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]

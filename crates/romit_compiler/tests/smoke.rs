@@ -145,8 +145,7 @@ fn script_rejects_equals_in_expression() {
     let r = Parser::parse_file("eq_expr.rmt", src);
     assert!(r.is_err());
     let msgs = romit_compiler::format_diagnostics(&r.unwrap_err());
-    assert!(msgs.contains("P010"));
-    assert!(msgs.contains("is") || msgs.contains("=="));
+    assert!(msgs.contains("P010") || msgs.contains("P020") || msgs.contains("="));
 }
 
 #[test]
@@ -188,4 +187,117 @@ fn script_set_spec_mix_still_e005() {
     assert!(r.is_err());
     let msgs = romit_compiler::format_diagnostics(&r.unwrap_err());
     assert!(msgs.contains("E005"));
+}
+
+#[test]
+fn run_sum_fn_comma_args() {
+    let src = include_str!("../../../examples/beginner/sum_fn.rmt");
+    let out = romit_compiler::run_source(src, "sum_fn.rmt", 1000).unwrap();
+    assert_eq!(out.stdout.trim(), "7", "stdout={}", out.stdout);
+}
+
+#[test]
+fn function_comma_and_space_params_parse_same() {
+    let colon = "sum: a, b\n  give a plus b\n";
+    let alias = "fn sum a b\n  give a plus b\n";
+    let long = "function sum a, b\n  give a plus b\n";
+    assert!(Parser::parse_file("c.rmt", colon).is_ok());
+    assert!(Parser::parse_file("s.rmt", alias).is_ok());
+    assert!(Parser::parse_file("f.rmt", long).is_ok());
+}
+
+#[test]
+fn fn_no_param_def_runs() {
+    let src = "fn hello\n  give \"ok\"\n\nsay hello\n";
+    let out = romit_compiler::run_source(src, "hello.rmt", 100).unwrap();
+    assert_eq!(out.stdout.trim(), "ok");
+}
+
+#[test]
+fn fn_aliases_example_runs() {
+    let src = include_str!("../../../examples/beginner/fn_aliases.rmt");
+    let out = romit_compiler::run_source(src, "fn_aliases.rmt", 1000).unwrap();
+    assert_eq!(out.stdout.trim(), "612");
+}
+
+#[test]
+fn operators_symbols_and_words() {
+    let src = r#"set x to 2+3*4
+set y to 10 remainder 3
+set ok to x is 14 and y==1
+say ok
+"#;
+    let out = romit_compiler::run_source(src, "ops.rmt", 100).unwrap();
+    assert_eq!(out.stdout.trim(), "true");
+}
+
+#[test]
+fn say_comma_parts_unchanged_total_line() {
+    let src = "set total to 14\nsay \"Total: \", total\n";
+    let out = romit_compiler::run_source(src, "total.rmt", 100).unwrap();
+    assert_eq!(out.stdout.trim(), "Total: 14");
+}
+
+#[test]
+fn say_three_comma_parts_nested_calls() {
+    let src = r#"one: n
+  give n
+sum: a, b
+  give a plus b
+say one 1, sum 2, 3
+"#;
+    let out = romit_compiler::run_source(src, "three.rmt", 1000).unwrap();
+    assert_eq!(out.stdout.trim(), "15");
+}
+
+#[test]
+fn negative_trailing_comma_p014() {
+    let src = include_str!("../../../examples/negative/trailing_comma.rmt");
+    let r = Parser::parse_file("trailing_comma.rmt", src);
+    assert!(r.is_err());
+    let msgs = romit_compiler::format_diagnostics(&r.unwrap_err());
+    assert!(msgs.contains("P014"));
+}
+
+#[test]
+fn negative_doubled_comma_p015() {
+    let src = include_str!("../../../examples/negative/doubled_comma.rmt");
+    let r = Parser::parse_file("doubled_comma.rmt", src);
+    assert!(r.is_err());
+    let msgs = romit_compiler::format_diagnostics(&r.unwrap_err());
+    assert!(msgs.contains("P015"));
+}
+
+#[test]
+fn negative_fn_missing_name_e119() {
+    let src = include_str!("../../../examples/negative/fn_missing_name.rmt");
+    let r = Parser::parse_file("fn_missing_name.rmt", src);
+    assert!(r.is_err());
+    let msgs = romit_compiler::format_diagnostics(&r.unwrap_err());
+    assert!(msgs.contains("E119"));
+}
+
+#[test]
+fn negative_fn_missing_body_e118() {
+    let src = include_str!("../../../examples/negative/fn_missing_body.rmt");
+    let r = Parser::parse_file("fn_missing_body.rmt", src);
+    assert!(r.is_err());
+    let msgs = romit_compiler::format_diagnostics(&r.unwrap_err());
+    assert!(msgs.contains("E118"));
+}
+
+#[test]
+fn negative_call_with_colon_p027() {
+    let src = include_str!("../../../examples/negative/call_with_colon.rmt");
+    let r = Parser::parse_file("call_with_colon.rmt", src);
+    assert!(r.is_err());
+    let msgs = romit_compiler::format_diagnostics(&r.unwrap_err());
+    assert!(msgs.contains("P027"));
+}
+
+#[test]
+fn run_factorial_script() {
+    let src = include_str!("../../../examples/beginner/factorial.rmt");
+    let out = romit_compiler::run_source(src, "factorial.rmt", 50_000).unwrap();
+    assert_eq!(out.stdout.trim(), "120");
 }

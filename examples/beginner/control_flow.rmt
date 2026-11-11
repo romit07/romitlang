@@ -1,0 +1,18 @@
+set n to 0
+if n is 0
+  say "zero"
+otherwise if n is above 0
+  say "positive"
+otherwise
+  say "negative"
+
+repeat 2 times
+  say "tick"
+
+for each i in 1 to 3
+  say i
+
+set x to 0
+while x is below 3
+  set x to x plus 1
+say x

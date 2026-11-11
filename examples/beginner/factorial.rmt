@@ -1,0 +1,7 @@
+fact: n
+  if n is below 2
+    give 1
+  otherwise
+    give n times fact n minus 1
+
+say fact 5

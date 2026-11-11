@@ -1,0 +1,5 @@
+greet: name is "world"
+  give "Hello, " plus name
+
+say greet
+say greet with name "Ada"

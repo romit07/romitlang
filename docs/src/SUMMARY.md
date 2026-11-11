@@ -28,6 +28,8 @@
 - [Brace-free surface](language/surface.md)
 - [Blocks and indentation](language/indentation.md)
 - [Calls and phrases](language/phrases.md)
+- [Functions and calls](language/functions.md)
+- [Operators](language/operators.md)
 - [Strings and join](language/strings.md)
 - [Optional spec layer](language/spec-layer.md)
 
@@ -39,5 +41,6 @@
 
 # Reference
 
+- [Swift feature map](reference/swift-feature-map.md)
 - [Error codes](reference/errors.md)
 - [Roadmap](reference/roadmap.md)

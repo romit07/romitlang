@@ -9,6 +9,10 @@ pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
     errors: Vec<Diagnostic>,
+    /// When true, a comma ends a list item the same way newline does (params, args).
+    list_item_mode: bool,
+    /// When set, a matching word ends expression parsing (e.g. `times` after `repeat N`).
+    expr_stop_word: Option<String>,
 }
 
 impl Parser {
@@ -27,6 +31,8 @@ impl Parser {
             tokens,
             pos: 0,
             errors: Vec::new(),
+            list_item_mode: false,
+            expr_stop_word: None,
         };
         p.skip_newlines();
         let is_spec = matches!(p.peek().kind, TokenKind::Ident(ref s) if s == "spec");
@@ -47,7 +53,7 @@ impl Parser {
 
     fn parse_script(&mut self) -> Result<Script, Diagnostic> {
         let span = self.span();
-        let mut stmts = Vec::new();
+        let mut items = Vec::new();
         while !matches!(self.peek().kind, TokenKind::Eof) {
             self.skip_top_level();
             if matches!(self.peek().kind, TokenKind::Eof) {
@@ -69,75 +75,542 @@ impl Parser {
                         ),
                     )
                     .with_help(
-                        "use only `say`, `print`, `set`, and `name = value` lines, or start the file with `spec` for the optional spec layer",
+                        "use `say`, `print`, `set`, functions (`name:`, `fn`, `function`), and control flow, or start with `spec`",
                     ));
                 }
             }
-            let stmt_span = self.span();
-            let head = self
-                .peek_word()
-                .ok_or_else(|| self.err_here("a `say`, `print`, `set`, or assignment statement"))?;
-            match head.as_str() {
-                "say" | "print" => {
-                    self.bump();
-                    let parts = self.parse_say_parts()?;
-                    self.skip_newlines();
-                    stmts.push(ScriptStmt::Say {
-                        parts,
-                        span: stmt_span,
-                    });
-                }
-                "set" => {
-                    self.bump();
-                    let name = self.word()?;
-                    if self.word()? != "to" {
-                        return Err(self.err_here("'to' after variable name"));
-                    }
-                    let value = self.parse_expr_until_line()?;
-                    self.skip_newlines();
-                    stmts.push(ScriptStmt::Set {
-                        name,
-                        value,
-                        span: stmt_span,
-                    });
-                }
-                _ => {
-                    let assign = self
-                        .tokens
-                        .get(self.pos + 1)
-                        .is_some_and(|t| matches!(t.kind, TokenKind::Assign));
-                    if !assign {
-                        return Err(self
-                            .err_here("a `say`, `print`, `set`, or assignment statement")
-                            .with_help(
-                                "assign with `name = value` or `set name to value`; output with `say` or `print`",
-                            ));
-                    }
-                    let name = head;
-                    self.bump();
-                    self.bump();
-                    let value = self.parse_expr_until_line()?;
-                    self.skip_newlines();
-                    stmts.push(ScriptStmt::Set {
-                        name,
-                        value,
-                        span: stmt_span,
-                    });
-                }
+            if self.peek_script_fn_def() {
+                items.push(ScriptItem::Fn(self.parse_script_fn()?));
+            } else if matches!(self.peek_word().as_deref(), Some("fn") | Some("function")) {
+                return Err(self.err_fn_keyword_not_definition());
+            } else {
+                items.push(ScriptItem::Stmt(self.parse_script_stmt(false)?));
+            }
+            self.skip_newlines();
+        }
+        Ok(Script { items, span })
+    }
+
+    fn peek_script_fn_def(&self) -> bool {
+        match self.peek_word().as_deref() {
+            Some("fn") | Some("function") => true,
+            _ => {
+                matches!(self.peek().kind, TokenKind::Ident(_))
+                    && matches!(
+                        self.tokens.get(self.pos + 1).map(|t| &t.kind),
+                        Some(TokenKind::Colon)
+                    )
             }
         }
-        Ok(Script { stmts, span })
+    }
+
+    fn peek_word_at(&self, ahead: usize) -> Option<String> {
+        let mut i = self.pos;
+        let mut skipped = 0usize;
+        while i < self.tokens.len() && skipped < ahead {
+            if !matches!(self.tokens[i].kind, TokenKind::Newline) {
+                skipped += 1;
+            }
+            i += 1;
+        }
+        match self.tokens.get(i).map(|t| &t.kind) {
+            Some(TokenKind::Ident(s)) => Some(s.clone()),
+            _ => None,
+        }
+    }
+
+    fn err_fn_keyword_not_definition(&self) -> Diagnostic {
+        let t = self.peek();
+        Diagnostic::error(
+            "P026",
+            "`fn` and `function` start a definition only at the beginning of a line",
+            &self.file,
+            t.line,
+            t.column,
+            snippet_at(&self.source, t.line, t.column, "fn"),
+        )
+        .with_help("write `fn name …` or `name: …` with an indented body; calls stay `name 3, 4`")
+    }
+
+    fn parse_script_fn(&mut self) -> Result<ScriptFn, Diagnostic> {
+        let span = self.span();
+        let name = if self.peek_word() == Some("fn".into()) {
+            self.bump();
+            self.parse_fn_name_after_keyword("fn")?
+        } else if self.peek_word() == Some("function".into()) {
+            self.bump();
+            self.parse_fn_name_after_keyword("function")?
+        } else {
+            let name = self.word()?;
+            if !matches!(self.bump().kind, TokenKind::Colon) {
+                return Err(Diagnostic::error(
+                    "P027",
+                    "calls never use `:`; only definitions use `name: …`",
+                    &self.file,
+                    self.peek().line,
+                    self.peek().column,
+                    snippet_at(&self.source, self.peek().line, self.peek().column, ":"),
+                )
+                .with_help("call with `name 3, 4` or define with `name: a, b` / `fn name a, b`"));
+            }
+            name
+        };
+        let params = self.parse_fn_param_list()?;
+        self.skip_newlines();
+        if !matches!(self.peek().kind, TokenKind::Indent) {
+            return Err(Diagnostic::error(
+                "E118",
+                format!("function `{name}` needs an indented body after its header line"),
+                &self.file,
+                self.peek().line,
+                self.peek().column,
+                snippet_at(&self.source, self.peek().line, self.peek().column, "here"),
+            )
+            .with_help(
+                "add indented lines under the header (`give` to return); try `name: …`, `fn name …`, or `function name …`",
+            ));
+        }
+        self.expect_indent()?;
+        let body = self.parse_script_block(true)?;
+        self.expect_dedent()?;
+        Ok(ScriptFn {
+            name,
+            params,
+            body,
+            span,
+        })
+    }
+
+    fn parse_fn_name_after_keyword(&mut self, keyword: &str) -> Result<String, Diagnostic> {
+        if self.at_newline() || self.peek_word().is_none() {
+            let t = self.peek();
+            return Err(Diagnostic::error(
+                "E119",
+                format!("expected a function name after `{keyword}`"),
+                &self.file,
+                t.line,
+                t.column,
+                snippet_at(&self.source, t.line, t.column, keyword),
+            )
+            .with_help("write `fn sum a, b` or `function hello` with an indented body"));
+        }
+        self.word()
+    }
+
+    fn parse_fn_param_list(&mut self) -> Result<Vec<ScriptParam>, Diagnostic> {
+        let mut params = Vec::new();
+        let mut expect_param = false;
+        while !self.at_newline() {
+            self.skip_space_commas_before_list_item(&mut expect_param)?;
+            if self.at_newline() {
+                break;
+            }
+            let ps = self.span();
+            let pname = self.word()?;
+            let default = if self.peek_word() == Some("is".into()) {
+                self.bump();
+                Some(self.parse_expr_on_fn_header_line()?)
+            } else {
+                None
+            };
+            params.push(ScriptParam {
+                name: pname,
+                default,
+                span: ps,
+            });
+            expect_param = false;
+            if matches!(self.peek().kind, TokenKind::Comma) {
+                self.bump();
+                expect_param = true;
+                if self.at_newline() {
+                    return Err(self.comma_err_trailing());
+                }
+            } else if !self.at_newline() && self.peek_word().is_some() {
+                expect_param = true;
+            }
+        }
+        Ok(params)
+    }
+
+    fn parse_script_block(&mut self, in_fn: bool) -> Result<Vec<ScriptStmt>, Diagnostic> {
+        let mut stmts = Vec::new();
+        while !matches!(self.peek().kind, TokenKind::Dedent | TokenKind::Eof) {
+            self.skip_newlines();
+            if matches!(self.peek().kind, TokenKind::Dedent | TokenKind::Eof) {
+                break;
+            }
+            stmts.push(self.parse_script_stmt(in_fn)?);
+            self.skip_newlines();
+        }
+        Ok(stmts)
+    }
+
+    fn parse_script_stmt(&mut self, in_fn: bool) -> Result<ScriptStmt, Diagnostic> {
+        let stmt_span = self.span();
+        let head = self
+            .peek_word()
+            .ok_or_else(|| self.err_here("a script statement"))?;
+        match head.as_str() {
+            "say" | "print" => {
+                self.bump();
+                let parts = self.parse_say_parts()?;
+                Ok(ScriptStmt::Say {
+                    parts,
+                    span: stmt_span,
+                })
+            }
+            "set" => {
+                self.bump();
+                let name = self.word()?;
+                if self.word()? != "to" {
+                    return Err(self.err_here("'to' after variable name"));
+                }
+                let value = self.parse_expr_until_line()?;
+                Ok(ScriptStmt::Set {
+                    name,
+                    value,
+                    span: stmt_span,
+                })
+            }
+            "give" => {
+                if !in_fn {
+                    return Err(Diagnostic::error(
+                        "P022",
+                        "`give` is only allowed inside a `to` function body",
+                        &self.file,
+                        self.peek().line,
+                        self.peek().column,
+                        snippet_at(&self.source, self.peek().line, self.peek().column, "give"),
+                    )
+                    .with_help(
+                        "define with `name: …`, `fn name …`, or `function name …`, then `give <value>` to return",
+                    ));
+                }
+                self.bump();
+                let value = self.parse_expr_until_line()?;
+                Ok(ScriptStmt::Give {
+                    value,
+                    span: stmt_span,
+                })
+            }
+            "if" => self.parse_script_if_chain(stmt_span, in_fn),
+            "otherwise" => Err(Diagnostic::error(
+                "P024",
+                "`otherwise` must follow an `if` or `otherwise if` block",
+                &self.file,
+                self.peek().line,
+                self.peek().column,
+                snippet_at(
+                    &self.source,
+                    self.peek().line,
+                    self.peek().column,
+                    "otherwise",
+                ),
+            )
+            .with_help(
+                "use `if <condition>` first, then `otherwise if` or `otherwise` at the same indent",
+            )),
+            "repeat" => {
+                self.bump();
+                self.expr_stop_word = Some("times".into());
+                let count = self.parse_expr_until_line()?;
+                self.expr_stop_word = None;
+                if self.word()? != "times" {
+                    return Err(self.err_here("'times' after repeat count"));
+                }
+                self.skip_newlines();
+                self.expect_indent()?;
+                let body = self.parse_script_block(in_fn)?;
+                self.expect_dedent()?;
+                Ok(ScriptStmt::Repeat {
+                    count,
+                    body,
+                    span: stmt_span,
+                })
+            }
+            "for" => {
+                self.bump();
+                if self.word()? != "each" {
+                    return Err(self.err_here("'each' after for"));
+                }
+                let var = self.word()?;
+                if self.word()? != "in" {
+                    return Err(self.err_here("'in' after loop variable"));
+                }
+                let from = self.parse_range_endpoint()?;
+                if self.word()? != "to" {
+                    return Err(self.err_here("'to' after range start (e.g. `1 to 5`)"));
+                }
+                let to = self.parse_range_endpoint()?;
+                self.skip_newlines();
+                self.expect_indent()?;
+                let body = self.parse_script_block(in_fn)?;
+                self.expect_dedent()?;
+                Ok(ScriptStmt::ForEachRange {
+                    var,
+                    from,
+                    to,
+                    body,
+                    span: stmt_span,
+                })
+            }
+            "while" => {
+                self.bump();
+                let cond = self.parse_expr_until_line()?;
+                self.skip_newlines();
+                self.expect_indent()?;
+                let body = self.parse_script_block(in_fn)?;
+                self.expect_dedent()?;
+                Ok(ScriptStmt::While {
+                    cond,
+                    body,
+                    span: stmt_span,
+                })
+            }
+            _ => {
+                let assign = self
+                    .tokens
+                    .get(self.pos + 1)
+                    .is_some_and(|t| matches!(t.kind, TokenKind::Assign));
+                if !assign {
+                    return Err(self
+                        .err_here("a script statement")
+                        .with_help(
+                            "try `say`, `set`, `if`, `to` for functions, `repeat N times`, `for each x in 1 to 5`, or `while`",
+                        ));
+                }
+                let name = head;
+                self.bump();
+                self.bump();
+                let value = self.parse_expr_until_line()?;
+                Ok(ScriptStmt::Set {
+                    name,
+                    value,
+                    span: stmt_span,
+                })
+            }
+        }
+    }
+
+    fn parse_script_if_chain(
+        &mut self,
+        if_span: Span,
+        in_fn: bool,
+    ) -> Result<ScriptStmt, Diagnostic> {
+        self.bump();
+        if self.peek_word() == Some("then".into()) {
+            return Err(Diagnostic::error(
+                "P023",
+                "script `if` uses an indented block, not `then`",
+                &self.file,
+                self.peek().line,
+                self.peek().column,
+                snippet_at(&self.source, self.peek().line, self.peek().column, "then"),
+            )
+            .with_help("write `if <condition>` on one line, then indent the next lines"));
+        }
+        let cond = self.parse_expr_until_line()?;
+        self.skip_newlines();
+        self.expect_indent()?;
+        let body = self.parse_script_block(in_fn)?;
+        self.expect_dedent()?;
+        let mut elif = Vec::new();
+        let mut else_body = None;
+        self.skip_newlines();
+        while self.peek_word() == Some("otherwise".into()) {
+            let branch_span = self.span();
+            self.bump();
+            if self.peek_word() == Some("if".into()) {
+                self.bump();
+                let cond = self.parse_expr_until_line()?;
+                self.skip_newlines();
+                self.expect_indent()?;
+                let body = self.parse_script_block(in_fn)?;
+                self.expect_dedent()?;
+                elif.push(ScriptElif {
+                    cond,
+                    body,
+                    span: branch_span,
+                });
+                self.skip_newlines();
+                continue;
+            }
+            self.skip_newlines();
+            self.expect_indent()?;
+            let body = self.parse_script_block(in_fn)?;
+            self.expect_dedent()?;
+            else_body = Some(body);
+            break;
+        }
+        Ok(ScriptStmt::If {
+            cond,
+            body,
+            elif,
+            else_body,
+            span: if_span,
+        })
+    }
+
+    fn parse_range_endpoint(&mut self) -> Result<Expr, Diagnostic> {
+        self.parse_add_line()
     }
 
     fn parse_say_parts(&mut self) -> Result<Vec<Expr>, Diagnostic> {
         let mut parts = Vec::new();
         while !self.at_line_end() {
-            parts.push(self.parse_add_line()?);
+            if matches!(self.peek().kind, TokenKind::Comma) {
+                return Err(self.comma_err_doubled());
+            }
+            let rest_of_say_line = !self.say_has_following_print_part();
+            parts.push(self.parse_say_part_expr(rest_of_say_line)?);
+            if self.at_line_end() {
+                break;
+            }
+            if matches!(self.peek().kind, TokenKind::Comma) {
+                self.bump();
+                if self.at_line_end() {
+                    return Err(self.comma_err_trailing());
+                }
+            }
         }
         if parts.is_empty() {
             return Err(self.err_here("a value after `say` or `print`"));
         }
         Ok(parts)
+    }
+
+    /// Another `say` part follows when comma is then a callable name (e.g. `say sum 1, sum 2, 3`).
+    fn say_has_following_print_part(&self) -> bool {
+        let mut i = self.pos;
+        while i < self.tokens.len() {
+            match &self.tokens[i].kind {
+                TokenKind::Newline | TokenKind::Eof | TokenKind::Dedent | TokenKind::Indent => {
+                    return false;
+                }
+                TokenKind::Comma => {
+                    let mut j = i + 1;
+                    while j < self.tokens.len() {
+                        match &self.tokens[j].kind {
+                            TokenKind::Newline
+                            | TokenKind::Eof
+                            | TokenKind::Dedent
+                            | TokenKind::Indent => return false,
+                            TokenKind::Ident(name) => {
+                                return user_callable_name(name);
+                            }
+                            _ => {
+                                j += 1;
+                            }
+                        }
+                    }
+                    return false;
+                }
+                _ => i += 1,
+            }
+        }
+        false
+    }
+
+    fn parse_say_part_expr(&mut self, rest_of_line: bool) -> Result<Expr, Diagnostic> {
+        if let Some(w) = self.peek_word() {
+            if user_callable_name(&w) {
+                let saved_pos = self.pos;
+                let name = self.word()?;
+                let span = self.span();
+                if matches!(self.peek().kind, TokenKind::Colon) {
+                    return Err(Diagnostic::error(
+                        "P027",
+                        "calls never use `:`; use `name 3, 4`",
+                        &self.file,
+                        self.peek().line,
+                        self.peek().column,
+                        snippet_at(&self.source, self.peek().line, self.peek().column, ":"),
+                    )
+                    .with_help("define with `name: …`, `fn name …`, or `function name …`"));
+                }
+                if self.looks_like_call_suffix() {
+                    let (args, named) =
+                        self.parse_call_args_line(CallArgMode::SayPart { rest_of_line })?;
+                    return Ok(Expr::Call {
+                        name,
+                        args,
+                        named,
+                        span,
+                    });
+                }
+                // `say a + b` / `say a remainder b` — infix, not a call.
+                self.pos = saved_pos;
+            }
+        }
+        let prev = self.list_item_mode;
+        self.list_item_mode = true;
+        let e = self.parse_or_line()?;
+        self.list_item_mode = prev;
+        Ok(e)
+    }
+
+    fn parse_expr_on_fn_header_line(&mut self) -> Result<Expr, Diagnostic> {
+        let prev = self.list_item_mode;
+        self.list_item_mode = true;
+        let e = self.parse_add_line()?;
+        self.list_item_mode = prev;
+        Ok(e)
+    }
+
+    fn skip_space_commas_before_list_item(
+        &mut self,
+        need_item: &mut bool,
+    ) -> Result<(), Diagnostic> {
+        while matches!(self.peek().kind, TokenKind::Comma) {
+            if !*need_item {
+                return Err(self.comma_err_doubled());
+            }
+            self.bump();
+            *need_item = false;
+            if self.at_newline() {
+                return Err(self.comma_err_trailing());
+            }
+        }
+        Ok(())
+    }
+
+    fn comma_err_trailing(&self) -> Diagnostic {
+        let t = self.peek();
+        Diagnostic::error(
+            "P014",
+            "trailing comma",
+            &self.file,
+            t.line,
+            t.column,
+            snippet_at(&self.source, t.line, t.column, ","),
+        )
+        .with_help("remove the comma after the last item or add another value")
+    }
+
+    fn comma_err_doubled(&self) -> Diagnostic {
+        let t = self.peek();
+        Diagnostic::error(
+            "P015",
+            "unexpected comma right after another comma",
+            &self.file,
+            t.line,
+            t.column,
+            snippet_at(&self.source, t.line, t.column, ","),
+        )
+        .with_help("use a single comma between items")
+    }
+
+    fn skip_optional_commas_between_args(&mut self) -> Result<(), Diagnostic> {
+        while matches!(self.peek().kind, TokenKind::Comma) {
+            self.bump();
+            if self.at_line_end() {
+                return Err(self.comma_err_trailing());
+            }
+            if matches!(self.peek().kind, TokenKind::Comma) {
+                return Err(self.comma_err_doubled());
+            }
+        }
+        Ok(())
     }
 
     fn span(&self) -> Span {
@@ -995,6 +1468,13 @@ impl Parser {
         matches!(
             self.peek().kind,
             TokenKind::Newline | TokenKind::Dedent | TokenKind::Eof | TokenKind::Indent
+        ) || (self.list_item_mode && matches!(self.peek().kind, TokenKind::Comma))
+    }
+
+    fn at_physical_line_end(&self) -> bool {
+        matches!(
+            self.peek().kind,
+            TokenKind::Newline | TokenKind::Dedent | TokenKind::Eof | TokenKind::Indent
         )
     }
 
@@ -1044,6 +1524,47 @@ impl Parser {
         self.parse_cmp_line()
     }
 
+    fn comparison_op_after_is(&mut self) -> BinaryOp {
+        if self.peek_word() == Some("not".into()) {
+            self.bump();
+            return BinaryOp::Ne;
+        }
+        if self.peek_word() == Some("below".into()) {
+            self.bump();
+            return BinaryOp::Lt;
+        }
+        if self.peek_word() == Some("above".into()) {
+            self.bump();
+            return BinaryOp::Gt;
+        }
+        if self.peek_word() == Some("less".into()) {
+            self.bump();
+            if self.peek_word() == Some("than".into()) {
+                self.bump();
+            }
+            return BinaryOp::Lt;
+        }
+        if self.peek_word() == Some("more".into()) {
+            self.bump();
+            if self.peek_word() == Some("than".into()) {
+                self.bump();
+            }
+            return BinaryOp::Gt;
+        }
+        if self.peek_word() == Some("at".into()) {
+            self.bump();
+            if self.peek_word() == Some("least".into()) {
+                self.bump();
+                return BinaryOp::Ge;
+            }
+            if self.peek_word() == Some("most".into()) {
+                self.bump();
+                return BinaryOp::Le;
+            }
+        }
+        BinaryOp::Eq
+    }
+
     fn parse_cmp_line(&mut self) -> Result<Expr, Diagnostic> {
         let mut e = self.parse_add_line()?;
         loop {
@@ -1052,12 +1573,7 @@ impl Parser {
             }
             let op = if self.peek_word() == Some("is".into()) {
                 self.bump();
-                if self.peek_word() == Some("not".into()) {
-                    self.bump();
-                    BinaryOp::Ne
-                } else {
-                    BinaryOp::Eq
-                }
+                self.comparison_op_after_is()
             } else if self.peek_word() == Some("above".into()) {
                 self.bump();
                 BinaryOp::Gt
@@ -1153,6 +1669,9 @@ impl Parser {
                 break;
             }
             let op = if self.peek_word() == Some("times".into()) {
+                if self.expr_stop_word.as_deref().is_some_and(|w| w == "times") {
+                    break;
+                }
                 self.bump();
                 BinaryOp::Mul
             } else if self.peek_word() == Some("divided".into()) {
@@ -1162,6 +1681,9 @@ impl Parser {
                     return Err(self.err_here("'by' after divided"));
                 }
                 BinaryOp::Div
+            } else if self.peek_word() == Some("remainder".into()) {
+                self.bump();
+                BinaryOp::Mod
             } else {
                 match self.peek().kind {
                     TokenKind::Star => {
@@ -1171,6 +1693,10 @@ impl Parser {
                     TokenKind::Slash => {
                         self.bump();
                         BinaryOp::Div
+                    }
+                    TokenKind::Percent => {
+                        self.bump();
+                        BinaryOp::Mod
                     }
                     _ => break,
                 }
@@ -1203,19 +1729,219 @@ impl Parser {
 
     fn parse_postfix_line(&mut self) -> Result<Expr, Diagnostic> {
         let mut e = self.parse_primary()?;
-        while self.peek_word() == Some("of".into()) && !self.at_line_end() {
-            let span = self.span();
-            self.bump();
-            let arg = self.parse_unary_line()?;
-            if let Expr::Path(p, _) = &e {
-                e = Expr::Call {
-                    name: p.parts[0].clone(),
-                    args: vec![arg],
-                    span,
-                };
+        loop {
+            if self.at_line_end() {
+                break;
             }
+            if let Expr::Path(p, path_span) = &e {
+                if p.parts.len() == 1 && user_callable_name(&p.parts[0]) {
+                    if !self.looks_like_call_suffix() {
+                        break;
+                    }
+                    let name = p.parts[0].clone();
+                    let call_span = Span {
+                        line: path_span.line,
+                        column: path_span.column,
+                        end_line: self.peek().line,
+                        end_column: self.peek().column,
+                    };
+                    if matches!(self.peek().kind, TokenKind::Colon) {
+                        return Err(Diagnostic::error(
+                            "P027",
+                            "calls never use `:`; use `name 3, 4`",
+                            &self.file,
+                            self.peek().line,
+                            self.peek().column,
+                            snippet_at(&self.source, self.peek().line, self.peek().column, ":"),
+                        )
+                        .with_help("define with `name: …`, `fn name …`, or `function name …`"));
+                    }
+                    let (args, named) = self.parse_call_args_line(CallArgMode::RestOfLine)?;
+                    e = Expr::Call {
+                        name,
+                        args,
+                        named,
+                        span: call_span,
+                    };
+                    break;
+                }
+            }
+            if self.peek_word() == Some("of".into()) {
+                let span = self.span();
+                self.bump();
+                let arg = self.parse_unary_line()?;
+                if let Expr::Path(p, _) = &e {
+                    e = Expr::Call {
+                        name: p.parts[0].clone(),
+                        args: vec![arg],
+                        named: Vec::new(),
+                        span,
+                    };
+                    continue;
+                }
+            }
+            break;
         }
         Ok(e)
+    }
+
+    fn parse_call_args_line(
+        &mut self,
+        mode: CallArgMode,
+    ) -> Result<(Vec<Expr>, Vec<NamedArg>), Diagnostic> {
+        let mut args = Vec::new();
+        let mut named = Vec::new();
+        let prev = self.list_item_mode;
+        self.list_item_mode = true;
+        let mut need_arg = true;
+        while !self.at_physical_line_end() {
+            if matches!(self.peek().kind, TokenKind::Comma) {
+                if need_arg {
+                    self.list_item_mode = prev;
+                    return Err(self.comma_err_doubled());
+                }
+                if matches!(
+                    mode,
+                    CallArgMode::SayPart {
+                        rest_of_line: false
+                    }
+                ) {
+                    if self.comma_precedes_callable_say_part() {
+                        break;
+                    }
+                }
+                self.bump();
+                need_arg = true;
+                if self.at_physical_line_end() {
+                    self.list_item_mode = prev;
+                    return Err(self.comma_err_trailing());
+                }
+                continue;
+            }
+            if self.peek_word() == Some("with".into()) {
+                self.bump();
+                while !self.at_physical_line_end() {
+                    if matches!(self.peek().kind, TokenKind::Comma) {
+                        self.bump();
+                        if self.at_physical_line_end() {
+                            self.list_item_mode = prev;
+                            return Err(self.comma_err_trailing());
+                        }
+                        continue;
+                    }
+                    let span = self.span();
+                    let pname = self.word()?;
+                    let value = self.parse_add_line()?;
+                    named.push(NamedArg {
+                        name: pname,
+                        value,
+                        span,
+                    });
+                }
+                self.list_item_mode = prev;
+                return Ok((args, named));
+            }
+            if !self.might_start_call_arg() {
+                break;
+            }
+            let arg = self.parse_add_line()?;
+            if matches!(&arg, Expr::Call { .. })
+                && self.might_start_call_arg()
+                && !matches!(
+                    mode,
+                    CallArgMode::SayPart {
+                        rest_of_line: false
+                    }
+                )
+            {
+                self.list_item_mode = prev;
+                let t = self.peek();
+                return Err(Diagnostic::error(
+                    "P028",
+                    "a nested call is only allowed as the last argument on the line",
+                    &self.file,
+                    t.line,
+                    t.column,
+                    snippet_at(&self.source, t.line, t.column, "call"),
+                )
+                .with_help("set the inner result to a variable first, then pass it"));
+            }
+            args.push(arg);
+            need_arg = false;
+        }
+        self.list_item_mode = prev;
+        Ok((args, named))
+    }
+
+    fn comma_precedes_callable_say_part(&self) -> bool {
+        let mut i = self.pos + 1;
+        while i < self.tokens.len() {
+            match &self.tokens[i].kind {
+                TokenKind::Newline | TokenKind::Eof | TokenKind::Dedent | TokenKind::Indent => {
+                    return false;
+                }
+                TokenKind::Ident(name) => return user_callable_name(name),
+                _ => i += 1,
+            }
+        }
+        false
+    }
+
+    fn might_start_call_arg(&self) -> bool {
+        if self.at_line_end() {
+            return false;
+        }
+        match &self.peek().kind {
+            TokenKind::Int(_)
+            | TokenKind::Decimal(_)
+            | TokenKind::String(_)
+            | TokenKind::Color(_)
+            | TokenKind::Minus => true,
+            TokenKind::Ident(s) => !call_arg_stop_word(s),
+            _ => false,
+        }
+    }
+
+    fn looks_like_infix_after_value(&self) -> bool {
+        if self.token_starts_infix_op() {
+            return true;
+        }
+        matches!(
+            self.peek_word().as_deref(),
+            Some(
+                "plus" | "minus" | "times" | "divided" | "remainder" | "is" | "not" | "and" | "or"
+            )
+        )
+    }
+
+    fn token_starts_infix_op(&self) -> bool {
+        matches!(
+            self.peek().kind,
+            TokenKind::Plus
+                | TokenKind::Minus
+                | TokenKind::Star
+                | TokenKind::Slash
+                | TokenKind::Percent
+                | TokenKind::Eq
+                | TokenKind::Ne
+                | TokenKind::Lt
+                | TokenKind::Le
+                | TokenKind::Gt
+                | TokenKind::Ge
+        )
+    }
+
+    fn looks_like_call_suffix(&self) -> bool {
+        if self.at_line_end() {
+            return false;
+        }
+        if self.peek_word() == Some("with".into()) {
+            return true;
+        }
+        if self.looks_like_infix_after_value() {
+            return false;
+        }
+        self.might_start_call_arg()
     }
 
     fn parse_or(&mut self) -> Result<Expr, Diagnostic> {
@@ -1269,12 +1995,7 @@ impl Parser {
         loop {
             let op = if self.peek_word() == Some("is".into()) {
                 self.bump();
-                if self.peek_word() == Some("not".into()) {
-                    self.bump();
-                    BinaryOp::Ne
-                } else {
-                    BinaryOp::Eq
-                }
+                self.comparison_op_after_is()
             } else if self.peek_word() == Some("above".into()) {
                 self.bump();
                 BinaryOp::Gt
@@ -1419,11 +2140,23 @@ impl Parser {
                 e = Expr::Call {
                     name: p.parts[0].clone(),
                     args: vec![arg],
+                    named: Vec::new(),
                     span,
                 };
-            } else if let Expr::Call { name, mut args, .. } = e {
+            } else if let Expr::Call {
+                name,
+                mut args,
+                named,
+                ..
+            } = e
+            {
                 args.push(arg);
-                e = Expr::Call { name, args, span };
+                e = Expr::Call {
+                    name,
+                    args,
+                    named,
+                    span,
+                };
             }
         }
         Ok(e)
@@ -1450,7 +2183,12 @@ impl Parser {
             });
         }
         if let Some(w) = self.peek_word() {
-            if matches!(w.as_str(), "count" | "sum" | "min" | "max" | "any") {
+            if matches!(w.as_str(), "count" | "sum" | "min" | "max" | "any")
+                && matches!(
+                    self.tokens.get(self.pos + 1).map(|t| &t.kind),
+                    Some(TokenKind::Ident(_))
+                )
+            {
                 self.bump();
                 let entity = self.word()?;
                 let mut filter = None;
@@ -1547,6 +2285,69 @@ fn map_compare(op: &str) -> CompareOp {
         "at" => CompareOp::Ge,
         _ => CompareOp::Gt,
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum CallArgMode {
+    RestOfLine,
+    SayPart { rest_of_line: bool },
+}
+
+fn user_callable_name(name: &str) -> bool {
+    !matches!(
+        name,
+        "is" | "not"
+            | "and"
+            | "or"
+            | "plus"
+            | "minus"
+            | "times"
+            | "divided"
+            | "by"
+            | "remainder"
+            | "above"
+            | "below"
+            | "more"
+            | "less"
+            | "than"
+            | "fn"
+            | "function"
+            | "true"
+            | "false"
+    )
+}
+
+fn call_arg_stop_word(word: &str) -> bool {
+    matches!(
+        word,
+        "say"
+            | "print"
+            | "set"
+            | "to"
+            | "if"
+            | "otherwise"
+            | "repeat"
+            | "for"
+            | "while"
+            | "give"
+            | "spec"
+            | "with"
+            | "and"
+            | "or"
+            | "not"
+            | "is"
+            | "then"
+            | "else"
+            | "times"
+            | "each"
+            | "in"
+            | "plus"
+            | "minus"
+            | "divided"
+            | "by"
+            | "above"
+            | "below"
+    )
 }
 
 fn script_conflicts_with_spec(word: &str) -> bool {

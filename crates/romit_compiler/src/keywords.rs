@@ -68,5 +68,17 @@ pub fn is_keyword(word: &str) -> bool {
             | "of"
             | "call"
             | "otherwise"
+            | "give"
+            | "repeat"
+            | "times"
+            | "while"
+            | "fn"
+            | "function"
+            | "remainder"
+            | "more"
+            | "less"
+            | "than"
+            | "least"
+            | "most"
     )
 }
