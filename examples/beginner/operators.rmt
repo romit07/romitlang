@@ -1,0 +1,16 @@
+set a to 10
+set b to 3
+say a + b
+say a plus b
+say a * b
+say a times b
+say a / b
+say a divided by b
+say a % b
+say a remainder b
+say a is 10
+say a == 10
+say a is below 11
+say a < 11
+say a is at least 10
+say a >= 10

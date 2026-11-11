@@ -62,43 +62,122 @@ pub fn check_script(
     source: &str,
 ) -> Result<CheckedScript, Vec<Diagnostic>> {
     let mut diags = Vec::new();
-    if script.stmts.is_empty() {
+    if script.items.is_empty() {
         diags.push(Diagnostic::error(
             "E006",
-            "script is empty; add at least one `say`, `print`, `set`, or `name = value` line",
+            "script is empty; add at least one `say`, `print`, `set`, `to` function, or control-flow statement",
             file,
             script.span.line,
             script.span.column,
             snippet_at(source, script.span.line, script.span.column, "script"),
         ));
     }
+    let fn_map: HashMap<String, &ScriptFn> = script
+        .items
+        .iter()
+        .filter_map(|it| match it {
+            ScriptItem::Fn(f) => Some((f.name.clone(), f)),
+            _ => None,
+        })
+        .collect();
+
+    let mut seen_fns = HashSet::new();
+    for f in script.fns() {
+        if !seen_fns.insert(f.name.clone()) {
+            diags.push(
+                type_err(
+                    file,
+                    source,
+                    &f.span,
+                    "E110",
+                    format!("duplicate function `{}`", f.name),
+                )
+                .with_help("each `name:`, `fn name`, or `function name` definition must have a unique name"),
+            );
+        }
+    }
+
     let mut scope: Vec<String> = Vec::new();
-    for stmt in &script.stmts {
-        match stmt {
-            ScriptStmt::Set {
-                name,
-                value,
-                span: _,
-            } => {
-                check_script_expr(value, &scope, file, source, &mut diags);
-                scope.push(name.clone());
-            }
-            ScriptStmt::Say { parts, span } => {
-                for part in parts {
-                    check_script_expr(part, &scope, file, source, &mut diags);
-                    if !expr_is_printable(part) {
+    for item in &script.items {
+        match item {
+            ScriptItem::Fn(f) => {
+                let mut param_names = HashSet::new();
+                for p in &f.params {
+                    if scope.contains(&p.name) {
                         diags.push(type_err(
                             file,
                             source,
-                            span,
-                            "E107",
-                            "`say` or `print` needs a text, number, or boolean value".into(),
+                            &p.span,
+                            "E111",
+                            format!(
+                                "parameter `{name}` shadows variable in outer scope",
+                                name = p.name
+                            ),
+                        ));
+                    }
+                    if !param_names.insert(p.name.clone()) {
+                        diags.push(type_err(
+                            file,
+                            source,
+                            &p.span,
+                            "E112",
+                            format!(
+                                "duplicate parameter `{name}` in `{fname}`",
+                                name = p.name,
+                                fname = f.name
+                            ),
                         ));
                     }
                 }
+                let mut fn_scope: Vec<String> = f.params.iter().map(|p| p.name.clone()).collect();
+                check_script_block(
+                    &f.body,
+                    &mut fn_scope,
+                    &fn_map,
+                    file,
+                    source,
+                    &mut diags,
+                    true,
+                );
+                match block_must_return(&f.body) {
+                    BlockFlow::MissingReturn(span) => {
+                        diags.push(
+                            type_err(
+                                file,
+                                source,
+                                &span,
+                                "E113",
+                                format!(
+                                    "function `{name}` can finish without `give`",
+                                    name = f.name
+                                ),
+                            )
+                            .with_help(
+                                "end every path with `give <value>` or add `give` in each branch",
+                            ),
+                        );
+                    }
+                    BlockFlow::Unreachable(span) => {
+                        diags.push(
+                            type_err(
+                                file,
+                                source,
+                                &span,
+                                "E114",
+                                "unreachable statement after `give`".into(),
+                            )
+                            .with_help("remove code below `give` or move it above the return"),
+                        );
+                    }
+                    BlockFlow::Ok => {}
+                }
+            }
+            ScriptItem::Stmt(stmt) => {
+                check_script_stmt(stmt, &mut scope, &fn_map, file, source, &mut diags, false);
             }
         }
     }
+
     if diags
         .iter()
         .any(|d| d.severity == crate::diag::Severity::Error)
@@ -108,9 +187,215 @@ pub fn check_script(
     Ok(CheckedScript { script })
 }
 
+fn check_script_block(
+    stmts: &[ScriptStmt],
+    scope: &mut Vec<String>,
+    fns: &HashMap<String, &ScriptFn>,
+    file: &str,
+    source: &str,
+    diags: &mut Vec<Diagnostic>,
+    in_fn: bool,
+) {
+    let mut after_give = false;
+    for stmt in stmts {
+        if after_give && in_fn {
+            let span = stmt_span(stmt);
+            diags.push(type_err(
+                file,
+                source,
+                &span,
+                "E114",
+                "unreachable statement after `give`".into(),
+            ));
+        }
+        if matches!(stmt, ScriptStmt::Give { .. }) && in_fn {
+            after_give = true;
+        }
+        check_script_stmt(stmt, scope, fns, file, source, diags, in_fn);
+    }
+}
+
+fn check_script_stmt(
+    stmt: &ScriptStmt,
+    scope: &mut Vec<String>,
+    fns: &HashMap<String, &ScriptFn>,
+    file: &str,
+    source: &str,
+    diags: &mut Vec<Diagnostic>,
+    in_fn: bool,
+) {
+    match stmt {
+        ScriptStmt::Give { value, span } => {
+            if !in_fn {
+                diags.push(type_err(
+                    file,
+                    source,
+                    span,
+                    "P022",
+                    "`give` is only allowed inside a `to` function body".into(),
+                ));
+            }
+            check_script_expr(value, scope, fns, file, source, diags);
+        }
+        ScriptStmt::Set { name, value, .. } => {
+            check_script_expr(value, scope, fns, file, source, diags);
+            if !scope.contains(name) {
+                scope.push(name.clone());
+            }
+        }
+        ScriptStmt::Say { parts, span } => {
+            for part in parts {
+                check_script_expr(part, scope, fns, file, source, diags);
+                if !expr_is_printable(part) {
+                    diags.push(type_err(
+                        file,
+                        source,
+                        span,
+                        "E107",
+                        "`say` or `print` needs a text, number, or boolean value".into(),
+                    ));
+                }
+            }
+        }
+        ScriptStmt::If {
+            cond,
+            body,
+            elif,
+            else_body,
+            ..
+        } => {
+            check_script_expr(cond, scope, fns, file, source, diags);
+            let mut branch_scope = scope.clone();
+            check_script_block(body, &mut branch_scope, fns, file, source, diags, in_fn);
+            for eif in elif {
+                check_script_expr(&eif.cond, scope, fns, file, source, diags);
+                let mut elif_scope = scope.clone();
+                check_script_block(&eif.body, &mut elif_scope, fns, file, source, diags, in_fn);
+            }
+            if let Some(else_b) = else_body {
+                let mut else_scope = scope.clone();
+                check_script_block(else_b, &mut else_scope, fns, file, source, diags, in_fn);
+            }
+        }
+        ScriptStmt::Repeat { count, body, .. } => {
+            check_script_expr(count, scope, fns, file, source, diags);
+            let mut loop_scope = scope.clone();
+            check_script_block(body, &mut loop_scope, fns, file, source, diags, in_fn);
+        }
+        ScriptStmt::ForEachRange {
+            var,
+            from,
+            to,
+            body,
+            span,
+        } => {
+            check_script_expr(from, scope, fns, file, source, diags);
+            check_script_expr(to, scope, fns, file, source, diags);
+            let mut loop_scope = scope.clone();
+            if loop_scope.contains(var) {
+                diags.push(type_err(
+                    file,
+                    source,
+                    span,
+                    "E111",
+                    format!("loop variable `{var}` shadows an outer name"),
+                ));
+            }
+            loop_scope.push(var.clone());
+            check_script_block(body, &mut loop_scope, fns, file, source, diags, in_fn);
+        }
+        ScriptStmt::While { cond, body, .. } => {
+            check_script_expr(cond, scope, fns, file, source, diags);
+            let mut loop_scope = scope.clone();
+            check_script_block(body, &mut loop_scope, fns, file, source, diags, in_fn);
+        }
+    }
+}
+
+enum BlockFlow {
+    Ok,
+    MissingReturn(Span),
+    Unreachable(Span),
+}
+
+fn block_must_return(stmts: &[ScriptStmt]) -> BlockFlow {
+    let mut seen_give = false;
+    for stmt in stmts {
+        if seen_give {
+            return BlockFlow::Unreachable(stmt_span(stmt));
+        }
+        match stmt {
+            ScriptStmt::Give { .. } => seen_give = true,
+            ScriptStmt::If {
+                body,
+                elif,
+                else_body,
+                span,
+                ..
+            } => {
+                let mut all_return = !body.is_empty();
+                if all_return {
+                    all_return = matches!(block_must_return(body), BlockFlow::Ok);
+                }
+                for eif in elif {
+                    if eif.body.is_empty() {
+                        all_return = false;
+                        break;
+                    }
+                    if !matches!(block_must_return(&eif.body), BlockFlow::Ok) {
+                        all_return = false;
+                        break;
+                    }
+                }
+                if let Some(else_b) = else_body {
+                    if else_b.is_empty() || !matches!(block_must_return(else_b), BlockFlow::Ok) {
+                        all_return = false;
+                    }
+                } else {
+                    all_return = false;
+                }
+                if all_return {
+                    return BlockFlow::Ok;
+                }
+                if else_body.is_none() && elif.is_empty() {
+                    return BlockFlow::MissingReturn(span.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+    if seen_give {
+        BlockFlow::Ok
+    } else {
+        BlockFlow::MissingReturn(stmts.last().map(stmt_span).unwrap_or(Span {
+            line: 1,
+            column: 1,
+            end_line: 1,
+            end_column: 1,
+        }))
+    }
+}
+
+fn stmt_span(stmt: &ScriptStmt) -> Span {
+    match stmt {
+        ScriptStmt::Say { span, .. }
+        | ScriptStmt::Set { span, .. }
+        | ScriptStmt::If { span, .. }
+        | ScriptStmt::Repeat { span, .. }
+        | ScriptStmt::ForEachRange { span, .. }
+        | ScriptStmt::While { span, .. }
+        | ScriptStmt::Give { span, .. } => span.clone(),
+    }
+}
+
 fn expr_is_printable(expr: &Expr) -> bool {
     match expr {
-        Expr::Literal(_, _) | Expr::Path(_, _) | Expr::Binary { .. } | Expr::Unary { .. } => true,
+        Expr::Literal(_, _)
+        | Expr::Path(_, _)
+        | Expr::Binary { .. }
+        | Expr::Unary { .. }
+        | Expr::Call { .. }
+        | Expr::If { .. } => true,
         _ => false,
     }
 }
@@ -118,6 +403,7 @@ fn expr_is_printable(expr: &Expr) -> bool {
 fn check_script_expr(
     expr: &Expr,
     scope: &[String],
+    fns: &HashMap<String, &ScriptFn>,
     file: &str,
     source: &str,
     diags: &mut Vec<Diagnostic>,
@@ -128,13 +414,20 @@ fn check_script_expr(
             if matches!(name.as_str(), "true" | "false") {
                 return;
             }
+            if fns.contains_key(name) {
+                return;
+            }
             if !scope.iter().any(|v| v == name) {
-                let mut msg = format!("undefined variable `{name}`");
-                if let Some(hint) = did_you_mean(name, scope) {
+                let mut candidates: Vec<String> = scope.to_vec();
+                candidates.extend(fns.keys().cloned());
+                let mut msg = format!("undefined name `{name}`");
+                if let Some(hint) = did_you_mean(name, &candidates) {
                     msg.push_str(&format!("; did you mean `{hint}`?"));
                 }
                 let mut d = type_err(file, source, span, "E108", msg);
-                d = d.with_help(format!("set {name} to <value> or `{name} = <value>` first"));
+                d = d.with_help(format!(
+                    "set {name} to <value>, call a `to {name} …` function, or fix the spelling"
+                ));
                 diags.push(d);
             }
         }
@@ -148,16 +441,105 @@ fn check_script_expr(
             ));
         }
         Expr::Binary { left, right, .. } => {
-            check_script_expr(left, scope, file, source, diags);
-            check_script_expr(right, scope, file, source, diags);
+            check_script_expr(left, scope, fns, file, source, diags);
+            check_script_expr(right, scope, fns, file, source, diags);
         }
         Expr::Unary { expr, .. } => {
-            check_script_expr(expr, scope, file, source, diags);
+            check_script_expr(expr, scope, fns, file, source, diags);
         }
         Expr::Literal(_, _) => {}
-        Expr::Call { args, .. } => {
+        Expr::Call {
+            name,
+            args,
+            named,
+            span,
+        } => {
+            let Some(defn) = fns.get(name) else {
+                let mut candidates: Vec<String> = fns.keys().cloned().collect();
+                let mut msg = format!("undefined function `{name}`");
+                if let Some(hint) = did_you_mean(name, &candidates) {
+                    msg.push_str(&format!("; did you mean `{hint}`?"));
+                }
+                diags.push(type_err(file, source, span, "E115", msg).with_help(
+                    "define it with `name: …`, `fn name …`, or `function name …` in the same file",
+                ));
+                for a in args {
+                    check_script_expr(a, scope, fns, file, source, diags);
+                }
+                for n in named {
+                    check_script_expr(&n.value, scope, fns, file, source, diags);
+                }
+                return;
+            };
             for a in args {
-                check_script_expr(a, scope, file, source, diags);
+                check_script_expr(a, scope, fns, file, source, diags);
+            }
+            for n in named {
+                check_script_expr(&n.value, scope, fns, file, source, diags);
+            }
+            let mut bound = HashSet::new();
+            for (i, p) in defn.params.iter().enumerate() {
+                if i < args.len() {
+                    bound.insert(p.name.clone());
+                }
+            }
+            for n in named {
+                if !defn.params.iter().any(|p| p.name == n.name) {
+                    diags.push(type_err(
+                        file,
+                        source,
+                        &n.span,
+                        "E112",
+                        format!("`{name}` has no parameter `{pname}`", pname = n.name),
+                    ));
+                } else {
+                    bound.insert(n.name.clone());
+                }
+            }
+            let required = defn.params.iter().filter(|p| p.default.is_none()).count();
+            let positional = args.len();
+            if positional < required {
+                diags.push(
+                    type_err(
+                        file,
+                        source,
+                        span,
+                        "E112",
+                        format!(
+                            "`{name}` needs at least {required} argument(s), got {positional}",
+                            name = name
+                        ),
+                    )
+                    .with_help("pass values after the name or use `with param value`"),
+                );
+            }
+            if positional > defn.params.len() {
+                diags.push(type_err(
+                    file,
+                    source,
+                    span,
+                    "E112",
+                    format!(
+                        "`{name}` takes at most {} argument(s), got {positional}",
+                        defn.params.len()
+                    ),
+                ));
+            }
+            for p in &defn.params {
+                if p.default.is_none() && !bound.contains(&p.name) {
+                    diags.push(type_err(
+                        file,
+                        source,
+                        span,
+                        "E112",
+                        format!("missing argument `{pname}` for `{name}`", pname = p.name),
+                    ));
+                }
+            }
+            for p in &defn.params {
+                if scope.contains(&p.name) {
+                    // only flag when param name used as param in fn def — checked at defn site
+                }
             }
         }
         Expr::If {
@@ -166,20 +548,20 @@ fn check_script_expr(
             else_br,
             ..
         } => {
-            check_script_expr(cond, scope, file, source, diags);
-            check_script_expr(then_br, scope, file, source, diags);
-            check_script_expr(else_br, scope, file, source, diags);
+            check_script_expr(cond, scope, fns, file, source, diags);
+            check_script_expr(then_br, scope, fns, file, source, diags);
+            check_script_expr(else_br, scope, fns, file, source, diags);
         }
         Expr::Aggregate { filter, .. } => {
             if let Some(f) = filter {
-                check_script_expr(f, scope, file, source, diags);
+                check_script_expr(f, scope, fns, file, source, diags);
             }
         }
         Expr::Index { key, .. } => {
-            check_script_expr(key, scope, file, source, diags);
+            check_script_expr(key, scope, fns, file, source, diags);
         }
         Expr::ForEach { body, .. } => {
-            check_script_expr(body, scope, file, source, diags);
+            check_script_expr(body, scope, fns, file, source, diags);
         }
     }
 }

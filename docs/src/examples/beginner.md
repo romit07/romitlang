@@ -93,6 +93,72 @@ say "Hello from Romit"
 romit run examples/beginner/write_what_you_mean.rmt
 ```
 
+## sum_fn.rmt
+
+Script function with the preferred `sum:` header and a `say` call (no colon at the call site):
+
+```text
+sum: a, b
+  give a plus b
+
+say sum 3, 4
+```
+
+```bash
+romit run examples/beginner/sum_fn.rmt
+```
+
+## fn_aliases.rmt
+
+The same definition with `fn` and `function` (interchangeable with `name:`):
+
+```text
+function add a, b
+  give a plus b
+
+fn mul a, b
+  give a times b
+
+say add 2, 3
+say mul 4, 5
+```
+
+```bash
+romit run examples/beginner/fn_aliases.rmt
+```
+
+## operators.rmt
+
+Symbol and word operators (`plus`, `is at least`, `remainder`, …):
+
+```bash
+romit run examples/beginner/operators.rmt
+```
+
+## control_flow.rmt
+
+`if`, `otherwise if`, `otherwise`, `while`, and `for each` in a script.
+
+```bash
+romit run examples/beginner/control_flow.rmt
+```
+
+## factorial.rmt
+
+Recursion with `give` and comparison words:
+
+```bash
+romit run examples/beginner/factorial.rmt
+```
+
+## greet_default.rmt
+
+Default parameter value with `is`:
+
+```bash
+romit run examples/beginner/greet_default.rmt
+```
+
 ## calculator.rmt
 
 See the [Calculator tutorial](../tutorials/calculator.md).

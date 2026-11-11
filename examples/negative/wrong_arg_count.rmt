@@ -1,0 +1,4 @@
+sum: a, b
+  give a plus b
+
+say sum 1

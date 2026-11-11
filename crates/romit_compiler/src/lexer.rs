@@ -21,8 +21,11 @@ pub enum TokenKind {
     Minus,
     Star,
     Slash,
+    Percent,
     Dot,
     Assign,
+    Comma,
+    Colon,
 }
 
 #[derive(Debug, Clone)]
@@ -229,18 +232,7 @@ impl Lexer {
                     line,
                     col,
                     "P013",
-                    "Romit has no braces. Use indentation instead.",
-                ));
-            }
-
-            if c == ':' {
-                return Err(brace_err(
-                    file,
-                    &self.source,
-                    line,
-                    col,
-                    "P013",
-                    "Romit has no colons in code. Put nested lines underneath with indentation.",
+                    "Romit has no braces, brackets, or parentheses — use indentation for blocks",
                 ));
             }
 
@@ -363,7 +355,12 @@ impl Lexer {
                 }
                 '>' => {
                     self.bump();
-                    TokenKind::Gt
+                    if self.peek() == Some('=') {
+                        self.bump();
+                        TokenKind::Ge
+                    } else {
+                        TokenKind::Gt
+                    }
                 }
                 '+' => {
                     self.bump();
@@ -381,9 +378,21 @@ impl Lexer {
                     self.bump();
                     TokenKind::Slash
                 }
+                '%' => {
+                    self.bump();
+                    TokenKind::Percent
+                }
                 '.' => {
                     self.bump();
                     TokenKind::Dot
+                }
+                ',' => {
+                    self.bump();
+                    TokenKind::Comma
+                }
+                ':' => {
+                    self.bump();
+                    TokenKind::Colon
                 }
                 _ => {
                     return Err(brace_err(

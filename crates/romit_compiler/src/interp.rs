@@ -354,7 +354,10 @@ impl Interpreter {
         match expr {
             Expr::Literal(l, _) => literal_to_value(l),
             Expr::Path(p, _) => self.eval_path(rt, p, env),
-            Expr::Call { name, args, .. } => {
+            Expr::Call {
+                name, args, named, ..
+            } => {
+                let _ = named;
                 if env.call_depth > 128 {
                     return Value::Null;
                 }
@@ -776,6 +779,7 @@ fn eval_binary(op: &BinaryOp, l: &Value, r: &Value) -> Value {
         BinaryOp::Sub => sub_values(l, r),
         BinaryOp::Mul => mul_values(l, r),
         BinaryOp::Div => div_values(l, r),
+        BinaryOp::Mod => mod_values(l, r),
         BinaryOp::In => Value::Bool(false),
     }
 }
@@ -820,19 +824,34 @@ fn div_values(l: &Value, r: &Value) -> Value {
     Value::Int(to_i64(l) / b)
 }
 
+fn mod_values(l: &Value, r: &Value) -> Value {
+    let b = to_i64(r);
+    if b == 0 {
+        return Value::Null;
+    }
+    Value::Int(to_i64(l) % b)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunOutcome {
     pub stdout: String,
     pub steps: u64,
 }
 
+const SCRIPT_CALL_DEPTH_LIMIT: u32 = 256;
+
 pub struct ScriptInterpreter {
     script: CheckedScript,
+    fns: HashMap<String, ScriptFn>,
 }
 
 impl ScriptInterpreter {
     pub fn new(script: CheckedScript) -> Self {
-        Self { script }
+        let mut fns = HashMap::new();
+        for f in script.script.fns() {
+            fns.insert(f.name.clone(), f.clone());
+        }
+        Self { script, fns }
     }
 
     pub fn run_with_limits(
@@ -846,32 +865,180 @@ impl ScriptInterpreter {
             state: HashMap::new(),
             entities: HashMap::new(),
         };
-        let env = Env::default();
+        let mut env = ScriptEnv::default();
         let mut out = String::new();
         let mut steps = 0u64;
-        let mut env = env;
-        for stmt in &self.script.script.stmts {
-            match stmt {
-                ScriptStmt::Set { name, value, span } => {
-                    steps += 1;
-                    if steps > max_steps {
-                        return Err(vec![step_limit_err(file, source, span, max_steps)]);
-                    }
-                    let v = eval_script_expr(&rt, value, &env);
-                    // copy-on-assign: variables hold an owned snapshot of the value
-                    env.locals.insert(name.clone(), v);
+        for item in &self.script.script.items {
+            if let ScriptItem::Stmt(stmt) = item {
+                steps += 1;
+                if steps > max_steps {
+                    return Err(vec![step_limit_err(
+                        file,
+                        source,
+                        &stmt_span_stmt(stmt),
+                        max_steps,
+                    )]);
                 }
-                ScriptStmt::Say { parts, span } => {
-                    steps += 1;
-                    if steps > max_steps {
-                        return Err(vec![step_limit_err(file, source, span, max_steps)]);
-                    }
-                    let line = format_say_parts(parts, &rt, &env);
-                    writeln!(out, "{line}").ok();
+                match exec_script_stmt(
+                    stmt, &rt, &mut env, &self.fns, file, source, &mut out, false,
+                )? {
+                    ExecControl::Next => {}
+                    ExecControl::Return(_) => {}
                 }
             }
         }
         Ok(RunOutcome { stdout: out, steps })
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct ScriptEnv {
+    locals: HashMap<String, Value>,
+    call_depth: u32,
+}
+
+enum ExecControl {
+    Next,
+    Return(Value),
+}
+
+fn exec_script_stmt(
+    stmt: &ScriptStmt,
+    rt: &RuntimeState,
+    env: &mut ScriptEnv,
+    fns: &HashMap<String, ScriptFn>,
+    file: &str,
+    source: &str,
+    out: &mut String,
+    in_fn: bool,
+) -> Result<ExecControl, Vec<Diagnostic>> {
+    match stmt {
+        ScriptStmt::Set { name, value, .. } => {
+            let v = eval_script_expr(rt, value, env, fns, file, source)?;
+            env.locals.insert(name.clone(), v);
+            Ok(ExecControl::Next)
+        }
+        ScriptStmt::Say { parts, span } => {
+            let line = format_say_parts(parts, rt, env, fns, file, source)?;
+            writeln!(out, "{line}").ok();
+            let _ = span;
+            Ok(ExecControl::Next)
+        }
+        ScriptStmt::Give { value, .. } => {
+            let v = eval_script_expr(rt, value, env, fns, file, source)?;
+            Ok(ExecControl::Return(v))
+        }
+        ScriptStmt::If {
+            cond,
+            body,
+            elif,
+            else_body,
+            ..
+        } => {
+            if truthy(&eval_script_expr(rt, cond, env, fns, file, source)?) {
+                return exec_script_block(body, rt, env, fns, file, source, out, in_fn);
+            }
+            for branch in elif {
+                if truthy(&eval_script_expr(rt, &branch.cond, env, fns, file, source)?) {
+                    return exec_script_block(&branch.body, rt, env, fns, file, source, out, in_fn);
+                }
+            }
+            if let Some(else_b) = else_body {
+                exec_script_block(else_b, rt, env, fns, file, source, out, in_fn)
+            } else {
+                Ok(ExecControl::Next)
+            }
+        }
+        ScriptStmt::Repeat { count, body, .. } => {
+            let n = to_i64(&eval_script_expr(rt, count, env, fns, file, source)?);
+            for _ in 0..n.max(0) {
+                match exec_script_block(body, rt, env, fns, file, source, out, in_fn)? {
+                    ExecControl::Return(v) => return Ok(ExecControl::Return(v)),
+                    ExecControl::Next => {}
+                }
+            }
+            Ok(ExecControl::Next)
+        }
+        ScriptStmt::ForEachRange {
+            var,
+            from,
+            to,
+            body,
+            ..
+        } => {
+            let start = to_i64(&eval_script_expr(rt, from, env, fns, file, source)?);
+            let end = to_i64(&eval_script_expr(rt, to, env, fns, file, source)?);
+            let (lo, hi) = if start <= end {
+                (start, end)
+            } else {
+                (end, start)
+            };
+            for i in lo..=hi {
+                env.locals.insert(var.clone(), Value::Int(i));
+                match exec_script_block(body, rt, env, fns, file, source, out, in_fn)? {
+                    ExecControl::Return(v) => return Ok(ExecControl::Return(v)),
+                    ExecControl::Next => {}
+                }
+            }
+            Ok(ExecControl::Next)
+        }
+        ScriptStmt::While { cond, body, .. } => {
+            let mut guard = 0i64;
+            while truthy(&eval_script_expr(rt, cond, env, fns, file, source)?) {
+                guard += 1;
+                if guard > 1_000_000 {
+                    return Err(vec![Diagnostic::error(
+                        "E900",
+                        "while loop step limit exceeded",
+                        file,
+                        stmt_span_stmt(stmt).line,
+                        stmt_span_stmt(stmt).column,
+                        snippet_at(
+                            source,
+                            stmt_span_stmt(stmt).line,
+                            stmt_span_stmt(stmt).column,
+                            "while",
+                        ),
+                    )]);
+                }
+                match exec_script_block(body, rt, env, fns, file, source, out, in_fn)? {
+                    ExecControl::Return(v) => return Ok(ExecControl::Return(v)),
+                    ExecControl::Next => {}
+                }
+            }
+            Ok(ExecControl::Next)
+        }
+    }
+}
+
+fn exec_script_block(
+    stmts: &[ScriptStmt],
+    rt: &RuntimeState,
+    env: &mut ScriptEnv,
+    fns: &HashMap<String, ScriptFn>,
+    file: &str,
+    source: &str,
+    out: &mut String,
+    in_fn: bool,
+) -> Result<ExecControl, Vec<Diagnostic>> {
+    for stmt in stmts {
+        match exec_script_stmt(stmt, rt, env, fns, file, source, out, in_fn)? {
+            ExecControl::Return(v) => return Ok(ExecControl::Return(v)),
+            ExecControl::Next => {}
+        }
+    }
+    Ok(ExecControl::Next)
+}
+
+fn stmt_span_stmt(stmt: &ScriptStmt) -> Span {
+    match stmt {
+        ScriptStmt::Say { span, .. }
+        | ScriptStmt::Set { span, .. }
+        | ScriptStmt::If { span, .. }
+        | ScriptStmt::Repeat { span, .. }
+        | ScriptStmt::ForEachRange { span, .. }
+        | ScriptStmt::While { span, .. }
+        | ScriptStmt::Give { span, .. } => span.clone(),
     }
 }
 
@@ -886,45 +1053,167 @@ fn step_limit_err(file: &str, source: &str, span: &Span, max_steps: u64) -> Diag
     )
 }
 
-fn format_say_parts(parts: &[Expr], rt: &RuntimeState, env: &Env) -> String {
+fn format_say_parts(
+    parts: &[Expr],
+    rt: &RuntimeState,
+    env: &ScriptEnv,
+    fns: &HashMap<String, ScriptFn>,
+    file: &str,
+    source: &str,
+) -> Result<String, Vec<Diagnostic>> {
     let mut line = String::new();
     for part in parts {
-        let v = eval_script_expr(rt, part, env);
+        let v = eval_script_expr(rt, part, env, fns, file, source)?;
         line.push_str(&value_to_display(&v));
     }
-    line
+    Ok(line)
 }
 
-fn eval_script_expr(rt: &RuntimeState, expr: &Expr, env: &Env) -> Value {
+fn eval_script_expr(
+    rt: &RuntimeState,
+    expr: &Expr,
+    env: &ScriptEnv,
+    fns: &HashMap<String, ScriptFn>,
+    file: &str,
+    source: &str,
+) -> Result<Value, Vec<Diagnostic>> {
     match expr {
-        Expr::Literal(l, _) => literal_to_value(l),
-        Expr::Path(p, _) => {
+        Expr::Literal(l, _) => Ok(literal_to_value(l)),
+        Expr::Path(p, span) => {
             if p.parts.len() == 1 {
                 let n = &p.parts[0];
                 if let Some(v) = env.locals.get(n) {
-                    return v.clone();
+                    return Ok(v.clone());
                 }
                 if let Some(v) = rt.state.get(n) {
-                    return v.clone();
+                    return Ok(v.clone());
+                }
+                if fns.contains_key(n) && !env.locals.contains_key(n) {
+                    return call_script_fn(n, &[], &[], rt, env, fns, file, source, span);
                 }
             }
-            Value::Null
+            Ok(Value::Null)
         }
+        Expr::Call {
+            name,
+            args,
+            named,
+            span,
+        } => call_script_fn(name, args, named, rt, env, fns, file, source, span),
         Expr::Binary {
             op, left, right, ..
         } => {
-            let l = eval_script_expr(rt, left, env);
-            let r = eval_script_expr(rt, right, env);
-            eval_binary(op, &l, &r)
+            let l = eval_script_expr(rt, left, env, fns, file, source)?;
+            let r = eval_script_expr(rt, right, env, fns, file, source)?;
+            Ok(eval_binary(op, &l, &r))
         }
         Expr::Unary { op, expr, .. } => {
-            let e = eval_script_expr(rt, expr, env);
-            match op {
+            let e = eval_script_expr(rt, expr, env, fns, file, source)?;
+            Ok(match op {
                 UnaryOp::Not => Value::Bool(!truthy(&e)),
                 UnaryOp::Neg => neg_value(e),
+            })
+        }
+        Expr::If {
+            cond,
+            then_br,
+            else_br,
+            ..
+        } => {
+            if truthy(&eval_script_expr(rt, cond, env, fns, file, source)?) {
+                eval_script_expr(rt, then_br, env, fns, file, source)
+            } else {
+                eval_script_expr(rt, else_br, env, fns, file, source)
             }
         }
-        _ => Value::Null,
+        _ => Ok(Value::Null),
+    }
+}
+
+fn call_script_fn(
+    name: &str,
+    args: &[Expr],
+    named: &[NamedArg],
+    rt: &RuntimeState,
+    env: &ScriptEnv,
+    fns: &HashMap<String, ScriptFn>,
+    file: &str,
+    source: &str,
+    span: &Span,
+) -> Result<Value, Vec<Diagnostic>> {
+    let Some(defn) = fns.get(name) else {
+        return Ok(Value::Null);
+    };
+    if env.call_depth >= SCRIPT_CALL_DEPTH_LIMIT {
+        return Err(vec![Diagnostic::error(
+            "E116",
+            format!("call depth limit ({SCRIPT_CALL_DEPTH_LIMIT}) exceeded; possible infinite recursion in `{name}`"),
+            file,
+            span.line,
+            span.column,
+            snippet_at(source, span.line, span.column, name),
+        )
+        .with_help("add a base case or simplify mutual recursion")]);
+    }
+    let mut call_env = ScriptEnv {
+        locals: HashMap::new(),
+        call_depth: env.call_depth + 1,
+    };
+    let mut pos = 0usize;
+    for param in &defn.params {
+        if pos < args.len() {
+            let v = eval_script_expr(rt, &args[pos], env, fns, file, source)?;
+            call_env.locals.insert(param.name.clone(), v);
+            pos += 1;
+            continue;
+        }
+        if let Some(n) = named.iter().find(|n| n.name == param.name) {
+            let v = eval_script_expr(rt, &n.value, env, fns, file, source)?;
+            call_env.locals.insert(param.name.clone(), v);
+            continue;
+        }
+        if let Some(def) = &param.default {
+            let v = eval_script_expr(rt, def, env, fns, file, source)?;
+            call_env.locals.insert(param.name.clone(), v);
+        }
+    }
+    for n in named {
+        if defn.params.iter().any(|p| p.name == n.name) && !call_env.locals.contains_key(&n.name) {
+            let v = eval_script_expr(rt, &n.value, env, fns, file, source)?;
+            call_env.locals.insert(n.name.clone(), v);
+        }
+    }
+    let mut sink = String::new();
+    match exec_script_block(
+        &defn.body,
+        rt,
+        &mut call_env,
+        fns,
+        file,
+        source,
+        &mut sink,
+        true,
+    )? {
+        ExecControl::Return(v) => Ok(v),
+        ExecControl::Next => Err(vec![Diagnostic::error(
+            "E113",
+            format!("function `{name}` finished without `give`"),
+            file,
+            span.line,
+            span.column,
+            snippet_at(source, span.line, span.column, name),
+        )]),
+    }
+}
+
+fn clone_value(v: &Value) -> Value {
+    match v {
+        Value::Text(s) => Value::Text(s.clone()),
+        Value::Int(n) => Value::Int(*n),
+        Value::Money(m) => Value::Money(*m),
+        Value::Bool(b) => Value::Bool(*b),
+        Value::Enum(s) => Value::Enum(s.clone()),
+        Value::Null => Value::Null,
     }
 }
 
