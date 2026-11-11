@@ -326,9 +326,7 @@ fn set_targets(actions: &[Action]) -> HashSet<String> {
 }
 
 fn rule_covers(earlier: &RuleDecl, later: &RuleDecl) -> bool {
-    matches!(earlier.when, RuleWhen::Otherwise)
-        || (matches!(later.when, RuleWhen::Expr(_)) && !matches!(earlier.when, RuleWhen::Otherwise))
-            && false
+    matches!(earlier.when, RuleWhen::Otherwise) && matches!(later.when, RuleWhen::Expr(_))
 }
 
 fn is_obviously_unreachable(r: &RuleDecl) -> bool {

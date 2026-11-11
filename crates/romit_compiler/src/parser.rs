@@ -777,7 +777,9 @@ impl Parser {
                 fields,
                 span,
             })
-        } else if !self.at_newline() {
+        } else if !self.at_newline()
+            && !matches!(self.peek_word().as_deref(), Some("is") | Some("to"))
+        {
             let mut fields = BTreeMap::new();
             while !self.at_newline() {
                 let fname = self.word()?;
