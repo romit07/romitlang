@@ -16,11 +16,17 @@ const BUILT_IN = {
   fibonacci: { name: "Fibonacci", file: "fibonacci.rmt" },
   todo_list: { name: "Todo list", file: "todo_list.rmt" },
   traffic_light: { name: "Traffic light", file: "traffic_light.rmt" },
+  lists: { name: "Lists and text", file: "lists.rmt" },
+  app_counter: { name: "App: Counter (UI)", file: "counter.rmt" },
+  app_todos: { name: "App: Todos (UI)", file: "todos.rmt" },
+  app_notes: { name: "App: Notes (UI)", file: "notes.rmt" },
+  app_showcase: { name: "App: Showcase (UI)", file: "showcase.rmt" },
 };
 
 const editor = document.getElementById("editor");
 const lineNums = document.getElementById("line-nums");
 const output = document.getElementById("output");
+const preview = document.getElementById("preview");
 const statusEl = document.getElementById("status");
 const examplesSel = document.getElementById("examples");
 
@@ -48,15 +54,30 @@ function saveHash() {
 }
 
 async function initWasm() {
-  const { default: init, run_program, check_program, test_program, romit_version } = await import(
+  const { default: init, run_program, check_program, test_program, romit_version, is_ui_program, build_ui_program } = await import(
     "./pkg/romit_wasm.js"
   );
   await init();
   statusEl.textContent = `Compiler WASM v${romit_version()} loaded`;
-  return { run_program, check_program, test_program };
+  return { run_program, check_program, test_program, is_ui_program, build_ui_program };
+}
+
+function showPreview(json) {
+  const data = JSON.parse(json);
+  if (data.ok) {
+    output.classList.remove("error");
+    output.textContent = "Live preview below — click around, it's a real app.";
+    preview.hidden = false;
+    preview.srcdoc = data.html;
+  } else {
+    preview.hidden = true;
+    output.classList.add("error");
+    output.textContent = data.diagnostics || "Error";
+  }
 }
 
 function showResult(json) {
+  preview.hidden = true;
   const data = JSON.parse(json);
   if (data.ok) {
     output.classList.remove("error");
@@ -76,6 +97,10 @@ async function runAction(mode) {
   saveHash();
   const src = editor.value;
   const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 8000));
+  if (wasmReady.is_ui_program && wasmReady.is_ui_program(src)) {
+    showPreview(wasmReady.build_ui_program(src));
+    return;
+  }
   try {
     const json = await Promise.race([
       Promise.resolve().then(() => {

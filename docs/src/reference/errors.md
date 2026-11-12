@@ -16,6 +16,7 @@
 | P021 | Expected a word |
 | P027 | Call syntax used `:` after the name (`fn`/`function` and `:` are for definitions only) |
 | P028 | Nested call not allowed except as the last argument on the line |
+| P029 | `{` in text without a matching `}` (use `{{` for a literal brace) |
 
 ## Type and rules (E1xx, E2xx)
 
@@ -48,6 +49,31 @@
 | U006 | Unknown theme token (lists valid tokens) |
 | U007 | Custom template file invalid or unreadable |
 | U008 | Cannot write build output |
+
+### Apps (`app` / `screen`)
+
+| Code | Summary |
+|------|---------|
+| U001 | Unknown element (with "did you mean") |
+| U003 | App structure: missing screen, bad screen or view line, block in the wrong place |
+| U006 | Unknown theme setting |
+| U101 | Unknown name: not a state value, computed value, loop item, or parameter |
+| U102 | Bad expression or unexpected word on a line |
+| U103 | Bad `state` or `computed` line (`name is value`) |
+| U104 | Unknown event, or event in the wrong place (`every` and `on change of` go on screens or the app) |
+| U105 | Modifier not indented under an element |
+| U106 | Bad `for each … in …` |
+| U107 | Modifier is missing its value |
+| U108 | Bad time for `every` |
+| U109 | Unknown or malformed action |
+| U110 | Name can't be used for state (modifier or reserved word) |
+| U111 | Name or screen defined twice |
+| U112 | Changing something that can't change (computed values, loop items) |
+| U113 | Unknown screen, or wrong number of values passed to it |
+| U114 | Unknown action, or wrong number of values passed to it |
+| U115 | Unknown view, or wrong number of values passed to it |
+| U116 | Control is missing `bind`, `options`, or `to` |
+| U117 | State value uses another one before it is defined |
 
 ## Warnings (W4xx)
 

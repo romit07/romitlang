@@ -175,6 +175,7 @@ name = "romit_wasm"
 version = "0.0.2"
 dependencies = [
  "romit_compiler",
+ "romit_ui",
  "serde",
  "serde_json",
  "wasm-bindgen",

@@ -6,7 +6,30 @@
 
 Romit is a general-purpose compiled language (`.rmt` files, `romit` CLI) aimed at **shorter code, where the compiler fills in sensible defaults** — short plain statements, indentation only, no braces, brackets, or parentheses. It reads almost like an AI prompt, but it runs. An optional spec layer adds rules, state machines, invariants, and tests when you want checks.
 
-This repository contains the Stage 0–1 compiler (implemented in Rust), the Romit UI MVP (`use ui`, `romit build`), examples, a home page, browser playground, and [mdBook](https://rust-lang.github.io/mdBook/) documentation.
+This repository contains the compiler (implemented in Rust), **Romit UI** for SwiftUI-style reactive apps and static pages (`use ui`, `romit build`), examples, a home page, a browser playground with live app previews, and [mdBook](https://rust-lang.github.io/mdBook/) documentation.
+
+```text
+use ui
+
+app Todos
+  state
+    draft is ""
+    todos is list saved
+
+  screen Home "My Todos"
+    row
+      field "What needs doing?" bind draft
+      button "Add" do add draft to todos
+        style prominent
+        disabled if draft is empty
+    list
+      for each todo in todos
+        text todo
+          on delete do remove todo from todos
+    caption "{count of todos} to do"
+```
+
+`romit build todos.rmt` produces one `index.html` you can open anywhere. See [Building apps](https://romitlang.org/ui-apps.html) and the [SwiftUI → Romit map](https://romitlang.org/reference/swiftui-map.html).
 
 Current release line: **v0.0.2**
 
@@ -47,7 +70,10 @@ cargo build --release
 
 ```bash
 romit run examples/beginner/write_what_you_mean.rmt
+romit run examples/beginner/lists.rmt
 romit test examples/beginner/hello_world.rmt
+romit run examples/apps/todos.rmt        # live preview at http://127.0.0.1:3847
+romit build examples/apps/showcase.rmt   # writes examples/apps/dist/index.html
 romit build examples/ui/landing.rmt
 ```
 
@@ -57,8 +83,9 @@ romit build examples/ui/landing.rmt
 |-----------|-------------|
 | `examples/beginner/` | Start here — scripts and optional specs |
 | `examples/advanced/` | Larger spec programs (brace-free); use `romit check --no-coverage` |
-| `examples/ui/` | Romit UI pages (`romit build`) |
-| `examples/planned/` | Future reactive UI syntax |
+| `examples/apps/` | SwiftUI-style apps: counter, todos, notes, showcase (`romit build` / `romit run`) |
+| `examples/ui/` | Static Romit UI pages (`romit build`) |
+| `examples/planned/` | Sketches of future syntax |
 | `examples/negative/` | Parser diagnostics (**P013**, **P001**, …) |
 
 ## Documentation

@@ -4,13 +4,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "WebAssembly bindings for Romit check, test, and run in the browser playground"
+description = "WebAssembly bindings for Romit check, test, run, and UI preview in the browser playground"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 romit_compiler = { path = "../romit_compiler" }
+romit_ui = { path = "../romit_ui" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 wasm-bindgen = "0.2"

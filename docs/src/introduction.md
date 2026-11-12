@@ -18,6 +18,20 @@ romit run hello.rmt
 
 For optional structured outputs and tests, start a file with `spec` — see [Optional spec layer](language/spec-layer.md) and `examples/beginner/hello_world.rmt`.
 
-The compiler in this repository implements **Stage 0–1**: scripts with `say`, a checker and tests for the spec layer, a browser playground, and a small interpreter. **Romit UI** (`use ui`, `romit build`) ships an MVP for static pages; richer `app` / `screen` syntax remains under `examples/planned/`.
+The compiler in this repository runs scripts (variables, decimals, text interpolation, lists, functions, loops), checks and tests the spec layer, and powers a browser playground. **Romit UI** (`use ui`) builds **reactive SwiftUI-style apps** (state, stacks, controls, navigation, tabs, sheets, saved data) and static pages:
+
+```text
+use ui
+
+state
+  count is 0
+
+screen Home
+  text "Tapped {count} times" bold
+  button "Tap me" do count += 1
+    style prominent
+```
+
+See [Building apps](ui-apps.md).
 
 See [Why Romit](why.md) for motivation and a before/after prompting example.

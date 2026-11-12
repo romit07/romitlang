@@ -1,0 +1,64 @@
+use ui
+
+note A to-do app: lists, saved data, computed values, navigation, sheets, and confirmations.
+
+app Todos
+  theme
+    accent indigo
+
+  state
+    draft is ""
+    filter is "All"
+    todos is list saved
+      title "Try Romit", done true, notes ""
+      title "Build an app", done false, notes "Start with a screen"
+
+  computed
+    left is count of todos where not done
+    shown is if filter is "Open" then todos where not done else if filter is "Done" then todos where done else todos
+
+  action addTodo
+    if draft is not empty
+      add to todos with title draft, done false, notes ""
+      draft = ""
+      toast "Added"
+
+  screen Home "My Todos"
+    toolbar
+      button "Clear done" do remove from todos where done
+        disabled if left is count of todos
+    row
+      field "What needs doing?" bind draft
+        on submit do addTodo
+      button "Add" do addTodo
+        style prominent
+        disabled if draft is empty
+    picker bind filter options "All", "Open", "Done"
+    if shown is empty
+      empty "Nothing here" icon "checkmark.circle" message "Add something above."
+    otherwise
+      list
+        for each todo in shown
+          TodoRow todo
+            on delete do remove todo from todos
+    caption "{left} left · {count of todos} total"
+
+  screen Detail with todo
+    form
+      section "Task"
+        field "Title" bind todo.title
+        toggle "Done" bind todo.done
+      section "Notes"
+        editor "Notes" bind todo.notes
+    button "Delete" role destructive
+      on tap
+        ask "Delete “{todo.title}”?" message "This can’t be undone."
+          remove todo from todos
+          go back
+
+  view TodoRow with todo
+    row
+      toggle bind todo.done
+        style checkbox
+      link todo.title to Detail with todo
+        strike if todo.done

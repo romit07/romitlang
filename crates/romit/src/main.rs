@@ -1,6 +1,6 @@
 use romit_compiler::{check::CheckedUnit, compile_file, format_diagnostics, interp::Interpreter};
 use romit_ui::{
-    build_ui, default_out_dir, format_diagnostics as ui_format, is_ui_source, serve_preview,
+    build, default_out_dir, format_diagnostics as ui_format, is_ui_source, serve_preview, BuildKind,
 };
 use std::env;
 use std::fs;
@@ -100,6 +100,18 @@ fn run_check(path: &str, skip_coverage: bool) -> bool {
         }
     };
     if is_ui_source(&source) {
+        if romit_ui::app::is_app_source(&source) {
+            return match romit_ui::app::compile_js(&source, path) {
+                Ok(_) => {
+                    println!("{}: ok (app)", path);
+                    true
+                }
+                Err(diags) => {
+                    eprint!("{}", ui_format(&diags));
+                    false
+                }
+            };
+        }
         println!("{}: ui page (use romit build)", path);
         return true;
     }
@@ -134,13 +146,22 @@ fn run_build(path: &str, out: Option<&str>) -> bool {
         Some(d) => std::path::PathBuf::from(d),
         None => default_out_dir(Path::new(path)),
     };
-    match build_ui(&source, path, &out_path) {
-        Ok(()) => {
+    match build(&source, path, &out_path) {
+        Ok(BuildKind::Page) => {
             println!(
                 "{}: wrote {}/index.html and {}/style.css",
                 path,
                 out_path.display(),
                 out_path.display()
+            );
+            true
+        }
+        Ok(BuildKind::App) => {
+            println!(
+                "{}: wrote {}/index.html (open it in a browser, or `romit run {}` to preview)",
+                path,
+                out_path.display(),
+                path
             );
             true
         }
@@ -189,7 +210,7 @@ fn run_test(path: &str) -> bool {
         }
     };
     if is_ui_source(&source) {
-        eprintln!("{}: ui page (no tests in MVP)", path);
+        eprintln!("{}: ui file (no tests yet)", path);
         return true;
     }
     let compiled = match compile_file(path, &source, true) {

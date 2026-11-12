@@ -36,7 +36,13 @@ struct RawLine {
 pub fn is_ui_source(source: &str) -> bool {
     for line in source.lines() {
         let t = line.trim();
-        if t.is_empty() || t.starts_with("note ") {
+        if t.is_empty()
+            || t == "note"
+            || t.starts_with("note ")
+            || t.starts_with("# ")
+            || t == "#"
+            || t.starts_with("//")
+        {
             continue;
         }
         return t == "use ui" || t.starts_with("use ui ");
