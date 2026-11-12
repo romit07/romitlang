@@ -8,7 +8,7 @@ Romit is a general-purpose compiled language (`.rmt` files, `romit` CLI) aimed a
 
 This repository contains the Stage 0–1 compiler (implemented in Rust), the Romit UI MVP (`use ui`, `romit build`), examples, a home page, browser playground, and [mdBook](https://rust-lang.github.io/mdBook/) documentation.
 
-Current release line: **v0.0.1**
+Current release line: **v0.0.2**
 
 See [Why Romit](https://romitlang.org/why.html) for motivation and a before/after example.
 
@@ -26,10 +26,10 @@ curl -fsSL https://romitlang.org/install.sh | sh
 irm https://romitlang.org/install.ps1 | iex
 ```
 
-Pin version **0.0.1**:
+Pin version **0.0.2**:
 
 ```bash
-ROMIT_VERSION=0.0.1 curl -fsSL https://romitlang.org/install.sh | sh
+ROMIT_VERSION=0.0.2 curl -fsSL https://romitlang.org/install.sh | sh
 ```
 
 Binaries are built for Linux `x86_64` and `aarch64` GNU, macOS Intel and Apple Silicon, and Windows `x86_64`. See [Install](https://romitlang.org/install.html) on the docs site for manual downloads, checksum verification, PATH setup, updates, and uninstall.
