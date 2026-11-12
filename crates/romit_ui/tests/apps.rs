@@ -32,6 +32,7 @@ fn examples_compile() {
             include_str!("../../../examples/apps/showcase.rmt"),
         ),
         ("notes", include_str!("../../../examples/apps/notes.rmt")),
+        ("mail", include_str!("../../../examples/apps/mail.rmt")),
     ] {
         assert!(is_app_source(src), "{name} should be an app");
         let html = build_app_html(src, name)
@@ -145,4 +146,108 @@ fn needs_a_screen() {
 fn html_escapes_script_close() {
     let html = build_app_html("use ui\nscreen Home\n  text \"</script><b>\"\n", "t.rmt").unwrap();
     assert!(!html.contains("\"</script>"));
+}
+
+// ---------- app structure ----------
+
+#[test]
+fn split_view_toolbars_subtitle_settings() {
+    let js = ok("use ui\nstate\n  folders is list \"A\"\nscreen Home \"Mail\" subtitle \"Hi\"\n  toolbar leading\n    button \"L\" do toast \"l\"\n  toolbar bottom\n    button \"B\" do toast \"b\"\n  toolbar title\n    text \"T\"\n  sidebar\n    for each f in folders\n      link f to Folder with f\n  text \"Pick one\"\nscreen Folder with f titled f inline\n  text f\nscreen Prefs \"Settings\" settings\n  text \"s\"\n");
+    assert!(js.contains("{place: \"leading\""));
+    assert!(js.contains("{place: \"bottom\""));
+    assert!(js.contains("{place: \"title\""));
+    assert!(js.contains("sidebar: () =>"));
+    assert!(js.contains("settings: true"));
+    assert!(js.contains("inline: true"));
+    assert!(js.contains("subtitle: () => \"Hi\""));
+}
+
+#[test]
+fn presentation_styles() {
+    let js = ok("use ui\nstate\n  n is 1\nscreen Home\n  button \"a\" do show S as half\n  button \"b\" do show S as popover\n  button \"c\" do show S as inspector locked\n  button \"d\" do show S as full\n  button \"e\" do cover S\n  button \"f\" do show S\nscreen S\n  text \"s\"\n");
+    for want in [
+        "R.sheet(\"S\", [], \"half\", false)",
+        "R.sheet(\"S\", [], \"popover\", false)",
+        "R.sheet(\"S\", [], \"inspector\", true)",
+        "R.sheet(\"S\", [], \"full\", false)",
+        "R.sheet(\"S\", [], \"sheet\", false)",
+    ] {
+        assert!(js.contains(want), "missing {want}");
+    }
+    err(
+        "use ui\nscreen Home\n  button \"a\" do show S as sideways\nscreen S\n  text \"s\"\n",
+        "U109",
+    );
+}
+
+#[test]
+fn windows_files_documents() {
+    let js = ok("use ui\nstate\n  notes is list\n  title is \"\"\ndocument notes, title named \"n.json\"\nscreen Home\n  button \"w\" do open window Home\n  button \"i\" do open file into notes as json\n  button \"s\" do save notes to file \"notes.json\"\n  button \"d\" do save document\n");
+    assert!(js.contains("R.openWindow(\"Home\", [])"));
+    assert!(js.contains("S.notes = await R.openFile(\"json\", S.notes);"));
+    assert!(js.contains("R.saveFile(S.notes, \"notes.json\");"));
+    assert!(js.contains("R.document = {names: [\"notes\", \"title\"]"));
+    assert!(js.contains("await R.doc.save();"));
+    err(
+        "use ui\nscreen Home\n  button \"d\" do save document\n",
+        "U118",
+    );
+    err(
+        "use ui\nstate\n  a is 1\ndocument missing\nscreen Home\n  text \"x\"\n",
+        "U118",
+    );
+}
+
+#[test]
+fn user_action_named_save_still_runs() {
+    let js = ok(
+        "use ui\nstate\n  n is 0\naction save\n  n = 1\nscreen Home\n  button \"Save\" do save\n",
+    );
+    assert!(js.contains("await A.save();"));
+}
+
+#[test]
+fn scene_phase_and_deep_links() {
+    let js = ok("use ui\nstate\n  last is \"\"\non background\n  last = \"bg\"\non foreground\n  toast \"back\"\non url\n  last = url\nscreen Home\n  text last\n");
+    assert!(js.contains("R.phases.push({kind: \"background\""));
+    assert!(js.contains("R.phases.push({kind: \"foreground\""));
+    assert!(js.contains("R.onUrl = (L_url) =>"));
+}
+
+#[test]
+fn search_suggestions_and_scopes() {
+    let js = ok("use ui\nstate\n  q is \"\"\n  sc is \"All\"\nscreen Home\n  search \"Find\" bind q suggest \"a\", \"b\" scopes \"All\", \"Mine\" scope sc\n");
+    assert!(js.contains("\"suggest\": R.opts([\"a\", \"b\"])"));
+    assert!(js.contains("\"scopes\": R.opts([\"All\", \"Mine\"])"));
+    assert!(js.contains("\"scope\": {get: () => S.sc"));
+}
+
+#[test]
+fn look_setting() {
+    for (look, want) in [
+        ("material", "\"material\""),
+        ("apple", "\"apple\""),
+        ("auto", "\"auto\""),
+    ] {
+        let js = ok(&format!(
+            "use ui\ntheme\n  look {look}\nscreen Home\n  text \"x\"\n"
+        ));
+        assert!(
+            js.contains(&format!("R.lookSetting = () => {want};")),
+            "{look}"
+        );
+    }
+    err(
+        "use ui\ntheme\n  look windows95\nscreen Home\n  text \"x\"\n",
+        "U006",
+    );
+}
+
+#[test]
+fn runtime_adapts_to_device() {
+    let html =
+        romit_ui::app::build_app_html("use ui\nscreen Home\n  text \"x\"\n", "t.rmt").unwrap();
+    // Apple devices get the Apple look; everything else (Android, Windows, Linux) gets Material 3
+    assert!(html.contains("function resolveLook()"));
+    assert!(html.contains("data-look=\"material\""));
 }

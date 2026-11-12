@@ -211,13 +211,18 @@ pub const KWARGS: &[&str] = &[
     "header",
     "columns",
     "min",
+    "suggest",
+    "scopes",
+    "scope",
 ];
 
 /// Which keyword arguments each element takes.
 pub fn element_kwargs(kind: &str) -> &'static [&'static str] {
     match kind {
-        "toggle" | "field" | "secure" | "editor" | "search" | "date" | "colorpicker"
-        | "disclosure" => &["bind", "placeholder"],
+        "search" => &["bind", "placeholder", "suggest", "scopes", "scope"],
+        "toggle" | "field" | "secure" | "editor" | "date" | "colorpicker" | "disclosure" => {
+            &["bind", "placeholder"]
+        }
         "slider" | "stepper" => &["bind", "from", "to", "step"],
         "picker" => &["bind", "options"],
         "button" | "link" => &["to", "with", "icon"],
@@ -263,6 +268,7 @@ pub const THEME_KEYS: &[&str] = &[
     "warning",
     "titlefont",
     "width",
+    "look",
 ];
 
 /// Reasons a word can't name a state value or parameter.

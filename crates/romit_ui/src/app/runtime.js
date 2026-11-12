@@ -181,7 +181,7 @@ function patchKids(el, kids) {
 /* ---------- icons (SF Symbols names → glyphs) ---------- */
 const ICONS = {
   house: "⌂", home: "⌂", gear: "⚙", gearshape: "⚙", settings: "⚙", star: "☆", "star.fill": "★", heart: "♡", "heart.fill": "♥",
-  plus: "+", add: "+", minus: "−", "plus.circle": "⊕", "plus.circle.fill": "⊕", "minus.circle": "⊖", xmark: "✕", close: "✕", "xmark.circle": "⊗", checkmark: "✓", check: "✓",
+  plus: "+", add: "+", "plus.square": "⊞", "square.on.square": "❐", "rectangle.portrait.and.arrow.right": "⇥", "sidebar.left": "◧", "slider.horizontal.3": "⚙", minus: "−", "plus.circle": "⊕", "plus.circle.fill": "⊕", "minus.circle": "⊖", xmark: "✕", close: "✕", "xmark.circle": "⊗", checkmark: "✓", check: "✓",
   "checkmark.circle": "✓", "checkmark.circle.fill": "✓", circle: "○", "circle.fill": "●", trash: "🗑", delete: "🗑", pencil: "✎", edit: "✎", "square.and.pencil": "✎",
   magnifyingglass: "⌕", search: "⌕", person: "👤", "person.fill": "👤", user: "👤", "person.2": "👥", people: "👥", bell: "🔔", "bell.fill": "🔔",
   envelope: "✉", mail: "✉", phone: "✆", message: "💬", chat: "💬", bubble: "💬", calendar: "📅", clock: "🕒", timer: "⏱", alarm: "⏰",
@@ -196,7 +196,14 @@ const ICONS = {
   car: "🚗", airplane: "✈", bicycle: "🚲", figure: "🚶", "figure.walk": "🚶", sparkles: "✨", wand: "🪄", lightbulb: "💡", hand: "✋", "hand.thumbsup": "👍",
   "face.smiling": "☺", smile: "☺", crown: "♛", trophy: "🏆", target: "◎", dollarsign: "$", money: "$", percent: "%", number: "#", textformat: "Aa",
 };
-R.icon = (name) => { const n = R.show(name); return ICONS[n] ?? ICONS[n.replace(/\.fill$/, "")] ?? n; };
+R.icon = (name) => {
+  const n = R.show(name);
+  if (ICONS[n] !== undefined) return ICONS[n];
+  // SF Symbol variants: "plus.square.fill" → "plus.square" → "plus"
+  const parts = n.split(".");
+  for (let i = parts.length - 1; i > 0; i--) { const k = parts.slice(0, i).join("."); if (ICONS[k] !== undefined) return ICONS[k]; }
+  return /^[a-z][a-z0-9.]*$/.test(n) ? "•" : n;
+};
 
 /* ---------- elements ---------- */
 const fire = (fn, e) => { if (fn) { if (e) e.stopPropagation(); fn(); } };
@@ -248,7 +255,7 @@ R.el = (kind, p, kids) => {
     }
     case "link": {
       const content = kids.length ? kids : [p.icon !== undefined ? h("span", { class: "r-icon" }, R.icon(p.icon)) : null, h("span", {}, label(p) || R.show(p.to))];
-      if (p.nav) node = h("a", { href: "#", class: "r-link r-navlink", onClick: (e) => { e.preventDefault(); e.stopPropagation(); fire(on.tap); R.go(p.nav.screen, p.nav.args); } }, content, h("span", { class: "r-chevron", "aria-hidden": "true" }, "›"));
+      if (p.nav) node = h("a", { href: "#", class: "r-link r-navlink", "data-nav": seg({ name: p.nav.screen, args: p.nav.args }), onClick: (e) => { e.preventDefault(); e.stopPropagation(); fire(on.tap); R.go(p.nav.screen, p.nav.args); } }, content, h("span", { class: "r-chevron", "aria-hidden": "true" }, "›"));
       else node = h("a", { href: R.show(p.to), class: "r-link", target: "_blank", rel: "noopener", onClick: (e) => { e.stopPropagation(); fire(on.tap); } }, content);
       break;
     }
@@ -259,11 +266,20 @@ R.el = (kind, p, kids) => {
     }
     case "field": case "secure": case "search": {
       const kb = p.keyboard;
-      node = h("label", { class: "r-field" + (kind === "search" ? " r-search" : "") }, kind === "search" ? h("span", { class: "r-icon", "aria-hidden": "true" }, "⌕") : null,
+      const listId = p.suggest !== undefined ? "s" + (++uid) : null;
+      const sugg = listId ? R.list(p.suggest).filter((x) => { const q = R.show(bindGet(p)).toLowerCase(); return !q || R.show(x).toLowerCase().includes(q); }) : [];
+      const input = h("label", { class: "r-field" + (kind === "search" ? " r-search" : "") }, kind === "search" ? h("span", { class: "r-icon", "aria-hidden": "true" }, "⌕") : null,
         h("input", { type: kind === "secure" ? "password" : kind === "search" ? "search" : (kb || "text"), placeholder: label(p) || (p.placeholder !== undefined ? R.show(p.placeholder) : (kind === "search" ? "Search" : "")),
-          "aria-label": label(p) || "text", value: bindGet(p) ?? "",
+          "aria-label": label(p) || "text", value: bindGet(p) ?? "", list: listId || false,
           onInput: (e) => { const cur = bindGet(p); bindSet(p, typeof cur === "number" ? R.num(e.target.value) : e.target.value); },
-          onKeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); fire(on.submit); } } })); break;
+          onKeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); fire(on.submit); } } }),
+        listId ? h("datalist", { id: listId }, sugg.map((x) => h("option", { value: R.show(x) }))) : null);
+      if (kind === "search" && p.scopes !== undefined) {
+        const scopes = R.list(p.scopes), cur = p.scope ? p.scope.get() : null;
+        const setScope = (o) => { if (p.scope) { p.scope.set(o); R.commit(); } };
+        node = h("div", { class: "r-search-wrap" }, input, h("div", { class: "r-segmented r-scopes", role: "radiogroup", "aria-label": "Search scope" }, scopes.map((o) => h("button", { type: "button", role: "radio", "aria-checked": R.same(o, cur) ? "true" : "false", class: R.same(o, cur) ? "on" : "", onClick: () => setScope(o) }, R.show(o)))));
+      } else node = input;
+      break;
     }
     case "editor": node = h("textarea", { class: "r-editor", placeholder: label(p), value: bindGet(p) ?? "", onInput: (e) => bindSet(p, e.target.value) }); break;
     case "slider": {
@@ -463,13 +479,163 @@ R.mod = (node, mods) => {
 /* ---------- navigation, sheets, dialogs ---------- */
 const nav = { tab: 0, stacks: [], sheet: null, dialog: null, toasts: [] };
 R.nav = nav;
-const tabs = () => Object.values(R.screens).filter((s) => s.tab !== null);
+R.phases = [];
+R.onUrl = null;
+R.document = null;
+const tabs = () => Object.values(R.screens).filter((s) => s.tab !== null && !s.settings);
 const stack = () => nav.stacks[nav.tab] || (nav.stacks[nav.tab] = []);
-R.go = (name, args) => { if (nav.sheet) nav.sheet = null; stack().push({ name, args: args || [] }); R.commit(); window.scrollTo && window.scrollTo(0, 0); };
+// Where the last click happened: anchors popovers, and tells sidebar links apart (split view).
+let lastRect = null, lastInSidebar = false;
+document.addEventListener("click", (e) => {
+  const t = e.target instanceof Element ? e.target : null;
+  if (!t) return;
+  const anchor = t.closest("button, a, .r-tappable, summary") || t;
+  lastRect = anchor.getBoundingClientRect();
+  lastInSidebar = !!t.closest(".r-sidebar");
+}, true);
+const wide = () => window.innerWidth >= 768;
+const rootScreen = () => R.screens[(stack()[0] || {}).name];
+const isSplit = () => { const r = rootScreen(); return !!(r && r.sidebar && wide()); };
+let pushHistory = false;
+R.go = (name, args) => {
+  nav.sheet = null;
+  const entry = { name, args: args || [] };
+  if (isSplit() && lastInSidebar) nav.stacks[nav.tab] = [stack()[0], entry]; // sidebar picks the detail
+  else stack().push(entry);
+  lastInSidebar = false;
+  pushHistory = true;
+  R.commit();
+  window.scrollTo && window.scrollTo(0, 0);
+};
 R.back = () => { if (nav.sheet) nav.sheet = null; else if (stack().length > 1) stack().pop(); R.commit(); };
 R.home = () => { nav.sheet = null; nav.stacks[nav.tab] = stack().slice(0, 1); R.commit(); };
-R.sheet = (name, args) => { nav.sheet = { name, args: args || [] }; R.commit(); };
+R.sheet = (name, args, style, locked) => {
+  let st = style || "sheet";
+  if (st === "inspector" && !wide()) st = "half";
+  nav.sheet = { name, args: args || [], style: st, locked: !!locked, anchor: lastRect };
+  R.commit();
+};
 R.close = () => { if (nav.sheet) nav.sheet = null; else if (stack().length > 1) stack().pop(); R.commit(); };
+R.openSettings = () => { const s = Object.values(R.screens).find((x) => x.settings); if (s) R.sheet(s.name, [], "sheet", false); };
+
+/* ---------- URL routing (NavigationPath, deep links, browser back) ---------- */
+const seg = (e) => encodeURIComponent(e.name) + (e.args && e.args.length ? "~" + encodeURIComponent(JSON.stringify(e.args)) : "");
+const routeHash = () => "#/" + stack().map(seg).join("/");
+// Find the live object a restored value came from, so edits stay connected to state.
+function relink(v) {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return v;
+  const j = JSON.stringify(v);
+  for (const k in S) if (Array.isArray(S[k])) { const hit = S[k].find((x) => x && typeof x === "object" && JSON.stringify(x) === j); if (hit) return hit; }
+  return v;
+}
+function parseRoute(hash) {
+  if (!hash || !hash.startsWith("#/")) return null;
+  const parts = hash.slice(2).split("/").filter(Boolean);
+  const out = [];
+  for (const p of parts) {
+    const [n, a] = p.split("~");
+    const name = decodeURIComponent(n);
+    if (!R.screens[name]) return null;
+    let args = [];
+    if (a) { try { args = JSON.parse(decodeURIComponent(a)).map(revive).map(relink); } catch (e) { return null; } }
+    if (args.length !== R.screens[name].params) return null;
+    out.push({ name, args });
+  }
+  return out.length ? out : null;
+}
+function applyRoute(entries) {
+  const ts = tabs();
+  const ti = ts.findIndex((s) => s.name === entries[0].name);
+  if (ti >= 0) nav.tab = ti;
+  nav.stacks[nav.tab] = entries;
+  nav.sheet = null;
+}
+function syncUrl() {
+  const want = routeHash();
+  if (location.hash === want) { pushHistory = false; return; }
+  try {
+    if (pushHistory) history.pushState(null, "", want); else history.replaceState(null, "", want);
+  } catch (e) { /* sandboxed preview: no history */ }
+  pushHistory = false;
+}
+function onRouteChange() {
+  const r = parseRoute(location.hash);
+  if (r) { applyRoute(r); R.commit(); }
+  else if (R.onUrl && location.hash && location.hash !== "#/") R.onUrl(location.href);
+}
+R.openWindow = (name, args) => {
+  const url = location.href.split("#")[0] + "#/" + seg({ name, args: args || [] });
+  const w = window.open(url, "_blank");
+  if (!w) R.toast("Allow pop-ups to open a new window");
+};
+
+/* ---------- files (fileImporter / fileExporter / DocumentGroup) ---------- */
+R.openFile = (kind, current) => new Promise((resolve) => {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = kind === "json" ? ".json,application/json" : kind === "image" ? "image/*" : kind === "text" ? "text/*,.txt,.md,.csv" : "";
+  let done = false;
+  const finish = (v) => { if (!done) { done = true; resolve(v); } };
+  input.addEventListener("cancel", () => finish(current));
+  input.addEventListener("change", () => {
+    const f = input.files && input.files[0];
+    if (!f) return finish(current);
+    const reader = new FileReader();
+    reader.onerror = () => { R.toast("Couldn't read " + f.name); finish(current); };
+    reader.onload = () => {
+      const res = reader.result;
+      if (kind === "image" || kind === "data") return finish(res);
+      if (kind === "json" || (kind === "auto" && /\.json$/i.test(f.name))) {
+        try { return finish(revive(JSON.parse(res))); } catch (e) { R.toast("That file isn't valid JSON"); return finish(current); }
+      }
+      finish(res);
+    };
+    if (kind === "image" || kind === "data") reader.readAsDataURL(f); else reader.readAsText(f);
+  });
+  input.click();
+});
+R.saveFile = (value, name) => {
+  const text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  const fname = R.show(name) || "data.json";
+  const blob = new Blob([text], { type: /\.json$/i.test(fname) ? "application/json" : "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = fname;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  R.toast("Saved " + fname);
+};
+R.doc = {
+  new: async () => {
+    if (!R.document) return;
+    const keep = {};
+    for (const k in S) if (!R.document.names.includes(k)) keep[k] = S[k];
+    R.init();
+    Object.assign(S, keep);
+    R.commit();
+  },
+  open: async () => {
+    if (!R.document) return;
+    const data = await R.openFile("json", null);
+    if (!data || typeof data !== "object") return;
+    for (const n of R.document.names) if (n in data) S[n] = data[n];
+    R.commit();
+  },
+  save: async () => {
+    if (!R.document) return;
+    const data = {};
+    for (const n of R.document.names) data[n] = S[n];
+    R.saveFile(data, R.document.file());
+  },
+};
+function documentMenu() {
+  if (!R.document) return null;
+  const item = (label, fn, keys) => h("button", { type: "button", class: "r-button", onClick: () => R.act(fn)() }, h("span", {}, label), h("span", { class: "r-shortcut" }, keys));
+  return h("details", { class: "r-menu r-menu-left" }, h("summary", { class: "r-button" }, "File"),
+    h("div", { class: "r-menu-items", onClick: (e) => { const d = e.currentTarget.parentElement; setTimeout(() => d.removeAttribute("open"), 0); } },
+      item("New", R.doc.new, ""), item("Open…", R.doc.open, "⌘O"), item("Save", R.doc.save, "⌘S")));
+}
 R.alert = (title, message) => { nav.dialog = { title: R.show(title), message: message === null ? null : R.show(message), buttons: [{ label: "OK", run: null, primary: true }] }; R.commit(); };
 R.ask = (title, message, yes) => { nav.dialog = { title: R.show(title), message: message === null ? null : R.show(message), buttons: [{ label: "Cancel", run: null }, { label: "OK", run: yes, primary: true, danger: true }] }; R.commit(); };
 R.toast = (msg) => { const t = { id: ++uid, text: R.show(msg) }; nav.toasts.push(t); R.commit(); setTimeout(() => { nav.toasts = nav.toasts.filter((x) => x !== t); R.commit(); }, 2200); };
@@ -520,21 +686,71 @@ function checkWatches() {
 }
 function activeScreens() { const out = []; const st = stack(); if (st.length) out.push(st[st.length - 1]); if (nav.sheet) out.push(nav.sheet); return out; }
 let lastActive = new Set();
-function screenView(entry, isSheet) {
+function screenView(entry, mode) {
+  // mode: "page" (in the stack), "sheet" (presented), "popover", "detail" (split view detail column)
   const sc = R.screens[entry.name];
   if (!sc) return h("div", {}, "missing screen " + entry.name);
   const args = entry.args;
   const st = stack();
-  const canBack = !isSheet && st.length > 1;
-  const toolbar = sc.toolbar(...args);
+  const presented = mode !== "page" && mode !== "detail";
+  const split = isSplit();
+  const minBack = split ? 2 : 1; // in a split view the sidebar is the way back
+  const canBack = !presented && st.length > minBack && st[st.length - 1] === entry;
+  const bars = sc.toolbar(...args);
+  const place = (p) => bars.filter((b) => b.place === p).map((b) => b.items);
   const title = R.show(sc.title(...args));
-  return h("div", { class: "r-screen" + (isSheet ? " r-screen-sheet" : "") + (canBack || isSheet ? " r-inline" : " r-root"), key: entry.name + (isSheet ? ":sheet" : ":" + st.length) },
+  const sub = sc.subtitle(...args);
+  const subtitle = sub === null || sub === undefined || sub === "" ? null : R.show(sub);
+  const isRoot = !presented && st[0] === entry;
+  const settings = Object.values(R.screens).find((x) => x.settings);
+  const inline = sc.inline || canBack || presented || mode === "detail" || (split && isRoot);
+  if (mode === "popover") {
+    return h("div", { class: "r-screen r-screen-popover", key: entry.name + ":popover" }, h("main", { class: "r-content" }, sc.body(...args)));
+  }
+  const showSidebar = !presented && sc.sidebar && isRoot && !split;
+  const body = showSidebar ? h("div", { class: "r-sidebar r-sidebar-inline" }, sc.sidebar(...args)) : sc.body(...args);
+  const lock = nav.sheet && nav.sheet.locked;
+  return h("div", { class: "r-screen" + (presented ? " r-screen-sheet" : "") + (inline ? " r-inline" : " r-root"), key: entry.name + ":" + mode + ":" + st.length },
     h("header", { class: "r-navbar" },
-      h("div", { class: "r-navbar-lead" }, canBack ? h("button", { type: "button", class: "r-back", onClick: () => R.back() }, "‹ ", R.show(R.screens[st[st.length - 2].name].title(...st[st.length - 2].args))) : null,
-        isSheet ? h("button", { type: "button", class: "r-back", onClick: () => R.close() }, "Close") : null),
-      h("div", { class: "r-navbar-title" }, title),
-      h("div", { class: "r-navbar-trail" }, toolbar)),
-    h("main", { class: "r-content" }, title ? h("h1", { class: "r-large-title" }, title) : null, sc.body(...args)));
+      h("div", { class: "r-navbar-lead" },
+        canBack ? (R.look === "material"
+          ? h("button", { type: "button", class: "r-back r-back-icon", "aria-label": "Back", title: "Back", onClick: () => R.back() }, "←")
+          : h("button", { type: "button", class: "r-back", onClick: () => R.back() }, "‹ ", R.show(R.screens[st[st.length - 2].name].title(...st[st.length - 2].args)))) : null,
+        presented && !lock ? (R.look === "material"
+          ? h("button", { type: "button", class: "r-back r-back-icon", "aria-label": "Close", title: "Close", onClick: () => R.close() }, "✕")
+          : h("button", { type: "button", class: "r-back", onClick: () => R.close() }, "Close")) : null,
+        isRoot ? documentMenu() : null,
+        place("leading")),
+      h("div", { class: "r-navbar-title" }, place("title").length ? place("title") : [h("span", {}, title), subtitle ? h("span", { class: "r-navbar-subtitle" }, subtitle) : null]),
+      h("div", { class: "r-navbar-trail" }, place("trailing"),
+        isRoot && settings && settings.name !== entry.name ? h("button", { type: "button", class: "r-button r-settings-button", "aria-label": "Settings", title: "Settings (⌘,)", onClick: () => R.openSettings() }, "⚙") : null)),
+    h("main", { class: "r-content" },
+      title && !inline ? h("h1", { class: "r-large-title" }, title) : null,
+      subtitle && !inline ? h("p", { class: "r-subtitle" }, subtitle) : null,
+      body),
+    place("bottom").length ? h("footer", { class: "r-bottombar" }, place("bottom")) : null);
+}
+function presentation() {
+  const sh = nav.sheet;
+  if (!sh) return null;
+  const closeOutside = (e) => { if (e.target === e.currentTarget && !sh.locked) R.close(); };
+  if (sh.style === "popover") {
+    const r = sh.anchor || { left: window.innerWidth / 2 - 160, bottom: 80, width: 0 };
+    const w = Math.min(340, window.innerWidth - 24);
+    const left = Math.max(12, Math.min(window.innerWidth - w - 12, r.left + (r.width || 0) / 2 - w / 2));
+    const top = Math.min(r.bottom + 10, window.innerHeight - 120);
+    return h("div", { class: "r-popover-backdrop", onClick: closeOutside },
+      h("div", { class: "r-popover", role: "dialog", style: { left: left + "px", top: top + "px", width: w + "px" } }, screenView(sh, "popover")));
+  }
+  if (sh.style === "inspector") {
+    return h("aside", { class: "r-inspector", role: "complementary", "aria-label": R.show(R.screens[sh.name].title(...sh.args)) }, screenView(sh, "sheet"));
+  }
+  if (sh.style === "full") {
+    return h("div", { class: "r-cover", role: "dialog", "aria-modal": "true" }, screenView(sh, "sheet"));
+  }
+  return h("div", { class: "r-sheet-backdrop", onClick: closeOutside },
+    h("div", { class: "r-sheet" + (sh.style === "half" ? " r-sheet-half" : ""), role: "dialog", "aria-modal": "true" },
+      h("div", { class: "r-grabber", "aria-hidden": "true" }), screenView(sh, "sheet")));
 }
 function draw() {
   queued = false;
@@ -543,14 +759,39 @@ function draw() {
   try {
     const root = document.getElementById("romit-app");
     const mode = R.show(R.appearance());
+    R.look = resolveLook();
+    document.documentElement.dataset.look = R.look;
     document.documentElement.dataset.theme = mode === "dark" ? "dark" : mode === "light" ? "light" : "";
     const ts = tabs();
     const st = stack();
     if (!st.length) st.push({ name: ts.length ? ts[nav.tab].name : R.home_screen, args: [] });
     const top = st[st.length - 1];
-    const kids = [screenView(top, false)];
-    if (ts.length > 1) kids.push(h("nav", { class: "r-tabbar" }, ts.map((s, i) => h("button", { type: "button", class: "r-tab" + (i === nav.tab ? " on" : ""), "aria-current": i === nav.tab ? "page" : false, onClick: () => { if (nav.tab === i) R.home(); else { nav.tab = i; R.commit(); } } }, h("span", { class: "r-icon" }, R.icon(s.tab || "circle")), h("span", { class: "r-tab-label" }, R.show(s.title()))))));
-    if (nav.sheet) kids.push(h("div", { class: "r-sheet-backdrop", onClick: (e) => { if (e.target === e.currentTarget) R.close(); } }, h("div", { class: "r-sheet", role: "dialog", "aria-modal": "true" }, screenView(nav.sheet, true))));
+    const kids = [];
+    if (isSplit()) {
+      const rootEntry = st[0];
+      const rs = R.screens[rootEntry.name];
+      const detail = st.length > 1 ? top : rootEntry;
+      const sel = st.length > 1 ? seg(st[1]) : null;
+      // the root screen's toolbars live on the sidebar (like Mail on iPad and Mac)
+      const rbars = rs.toolbar(...rootEntry.args);
+      const rplace = (pl) => rbars.filter((b) => b.place === pl).map((b) => b.items);
+      const settings = Object.values(R.screens).find((x) => x.settings);
+      const rsub = rs.subtitle(...rootEntry.args);
+      kids.push(h("div", { class: "r-split" },
+        h("nav", { class: "r-sidebar", "aria-label": R.show(rs.title(...rootEntry.args)), "data-selected": sel || "" },
+          h("div", { class: "r-sidebar-bar" }, documentMenu(), rplace("leading"), h("span", { class: "r-spacer" }), rplace("trailing"),
+            settings ? h("button", { type: "button", class: "r-button r-settings-button", "aria-label": "Settings", title: "Settings (⌘,)", onClick: () => R.openSettings() }, "⚙") : null),
+          h("div", { class: "r-sidebar-title" }, R.show(rs.title(...rootEntry.args))),
+          rsub === null || rsub === undefined || rsub === "" ? null : h("div", { class: "r-sidebar-subtitle" }, R.show(rsub)),
+          rs.sidebar(...rootEntry.args),
+          rplace("bottom").length ? h("div", { class: "r-sidebar-bottom" }, rplace("bottom")) : null),
+        h("div", { class: "r-split-detail" }, screenView(detail, st.length > 1 ? (st.length > 2 ? "page" : "detail") : "page"))));
+    } else {
+      kids.push(screenView(top, "page"));
+    }
+    if (ts.length > 1) kids.push(h("nav", { class: "r-tabbar" }, ts.map((s, i) => h("button", { type: "button", class: "r-tab" + (i === nav.tab ? " on" : ""), "aria-current": i === nav.tab ? "page" : false, onClick: () => { if (nav.tab === i) R.home(); else { nav.tab = i; pushHistory = true; R.commit(); } } }, h("span", { class: "r-icon" }, R.icon(s.tab || "circle")), h("span", { class: "r-tab-label" }, R.show(s.title()))))));
+    const pres = presentation();
+    if (pres) kids.push(pres);
     if (nav.dialog) {
       const d = nav.dialog;
       kids.push(h("div", { class: "r-dialog-backdrop" }, h("div", { class: "r-dialog", role: "alertdialog", "aria-modal": "true" },
@@ -558,8 +799,14 @@ function draw() {
         h("div", { class: "r-dialog-buttons" }, d.buttons.map((b) => h("button", { type: "button", class: (b.primary ? "primary" : "") + (b.danger ? " danger" : ""), autofocus: !!b.primary, onClick: () => { nav.dialog = null; if (b.run) R.act(b.run)(); else R.commit(); } }, b.label))))));
     }
     if (nav.toasts.length) kids.push(h("div", { class: "r-toasts", role: "status", "aria-live": "polite" }, nav.toasts.map((t) => h("div", { class: "r-toast", key: "t" + t.id }, t.text))));
-    const vroot = h("div", { class: "r-app" + (ts.length > 1 ? " r-has-tabs" : "") }, kids);
+    const hasBottom = !(isSplit() && top === st[0]) && R.screens[top.name] && R.screens[top.name].toolbar(...top.args).some((b) => b.place === "bottom");
+    const cls = "r-app" + (ts.length > 1 ? " r-has-tabs" : "") + (hasBottom ? " r-has-bottombar" : "") + (nav.sheet && nav.sheet.style === "inspector" ? " r-has-inspector" : "") + (isSplit() ? " r-is-split" : "");
+    const vroot = h("div", { class: cls }, kids);
     if (!root.firstChild) root.appendChild(mount(vroot)); else patch(root.firstChild, vroot);
+    // highlight the selected sidebar link
+    const sb = root.querySelector(".r-sidebar[data-selected]");
+    if (sb) { const sel = sb.getAttribute("data-selected"); sb.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("on", a.getAttribute("data-nav") === sel)); }
+    syncUrl();
     // appear / disappear
     const now = new Set(activeScreens().map((s) => s.name + "|" + JSON.stringify(s.args)));
     for (const s of activeScreens()) { const k = s.name + "|" + JSON.stringify(s.args); if (!lastActive.has(k) && R.screens[s.name].events.appear) R.screens[s.name].events.appear(...s.args); }
@@ -579,15 +826,51 @@ function applyTheme() {
     else if (k === "titlefont") r.setProperty("--title-font", `${JSON.stringify(R.show(t[k]))}, var(--font)`);
   }
 }
+/* ---------- look: Apple on Apple devices, Material 3 elsewhere ---------- */
+R.lookSetting = () => "auto";
+function resolveLook() {
+  let forced = null;
+  try { forced = new URLSearchParams(location.search).get("look"); } catch (e) { /* no URL */ }
+  let look = String(forced || window.ROMIT_LOOK || R.show(R.lookSetting()) || "auto").toLowerCase();
+  if (look === "auto") {
+    const ua = navigator.userAgent || "";
+    const apple = /iPhone|iPad|iPod|Macintosh|Mac OS X/.test(ua) && !/Android/.test(ua);
+    look = apple ? "apple" : "material";
+  }
+  if (look === "ios" || look === "cupertino") look = "apple";
+  if (look === "android" || look === "google") look = "material";
+  return look === "material" ? "material" : "apple";
+}
 R.start = () => {
   R.init();
   loadSaved();
   applyTheme();
   document.title = R.name;
+  const route = parseRoute(location.hash);
+  if (route) applyRoute(route);
   for (const s of R.starts) s();
+  if (R.onUrl && (location.search || (location.hash && !route && location.hash !== "#/"))) R.onUrl(location.href);
   for (const t of R.timers) setInterval(t.run, t.ms);
   for (const s of Object.values(R.screens)) for (const t of s.timers) setInterval(() => { for (const a of activeScreens()) if (a.name === s.name) t.run(...a.args); }, t.ms);
-  window.addEventListener("keydown", (e) => { if (e.key === "Escape" && (nav.dialog || nav.sheet)) { if (nav.dialog) nav.dialog = null; else nav.sheet = null; R.commit(); } });
+  window.addEventListener("keydown", (e) => {
+    const mod = e.metaKey || e.ctrlKey;
+    if (e.key === "Escape" && (nav.dialog || nav.sheet)) {
+      if (nav.dialog) nav.dialog = null; else if (!nav.sheet.locked) nav.sheet = null;
+      R.commit();
+    } else if (mod && e.key === ",") { e.preventDefault(); R.openSettings(); }
+    else if (mod && R.document && e.key.toLowerCase() === "s") { e.preventDefault(); R.act(R.doc.save)(); }
+    else if (mod && R.document && e.key.toLowerCase() === "o") { e.preventDefault(); R.act(R.doc.open)(); }
+  });
+  window.addEventListener("popstate", onRouteChange);
+  window.addEventListener("hashchange", onRouteChange);
+  let lastWide = wide();
+  window.addEventListener("resize", () => { if (wide() !== lastWide) { lastWide = wide(); R.commit(); } });
+  // scene phase: on background / on foreground
+  document.addEventListener("visibilitychange", () => {
+    const kind = document.hidden ? "background" : "foreground";
+    for (const p of R.phases) if (p.kind === kind) p.run();
+    for (const a of activeScreens()) { const ev = R.screens[a.name].events[kind]; if (ev) ev(...a.args); }
+  });
   checkWatches();
   draw();
 };

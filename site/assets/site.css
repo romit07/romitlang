@@ -266,6 +266,11 @@ main section {
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 
+/* `display: flex` below would otherwise override the hidden attribute on inactive tabs */
+[hidden] {
+  display: none !important;
+}
+
 .install-body {
   padding: 1rem 1.25rem;
   font-family: ui-monospace, "Cascadia Code", Menlo, monospace;

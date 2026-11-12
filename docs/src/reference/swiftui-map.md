@@ -4,6 +4,8 @@ This map walks through [Apple's SwiftUI documentation](https://developer.apple.c
 
 **Status:** ✅ shipped · 🟡 partial · ⏳ planned
 
+Unlike SwiftUI, Romit apps aren't Apple-only. The same file renders with an Apple look on iPhone, iPad and Mac and with Google's Material 3 on Android, Windows and Linux (`theme` → `look auto | apple | material`).
+
 ## Side by side
 
 ```swift
@@ -35,21 +37,36 @@ screen Home
 
 ## App structure
 
+Every App structure topic in Apple's docs that applies on the web is shipped. App extensions (widgets, Live Activities) and immersive spaces (visionOS) are Apple-platform only.
+
 | SwiftUI | Romit | Status |
 |---------|-------|--------|
 | `App`, `WindowGroup` | `app Name` (optional) | ✅ |
 | `NavigationStack`, `NavigationLink` | screens, `link "…" to Screen with value`, `go to Screen` | ✅ |
 | `navigationDestination(for:)` | `screen Detail with item` | ✅ |
-| `NavigationSplitView` | — | ⏳ |
+| `NavigationPath`, deep links | every screen has a URL (`#/Home/Detail~…`); browser back and forward work | ✅ |
+| `NavigationSplitView` | `sidebar` block in a screen | ✅ |
 | `TabView`, `Tab`, `.tabItem` | `screen Home tab "house"` | ✅ |
-| `.sheet`, `.fullScreenCover`, `.popover` | `show Screen`, `close` | 🟡 one sheet style |
-| `.alert` | `alert "Title" message "…"` | ✅ |
-| `.confirmationDialog` | `ask "Delete?"` + indented actions | ✅ |
-| `.toolbar`, `ToolbarItem` | `toolbar` block in a screen | ✅ |
-| `.navigationTitle` | `screen Home "Title"` or `titled expr` | ✅ |
-| `.searchable` | `search "Search" bind query` | ✅ |
+| `.navigationTitle`, `.navigationSubtitle` | `screen Home "Title" subtitle "…"`, `titled expr` | ✅ |
+| `.navigationBarTitleDisplayMode(.inline)` | `inline` on the screen line | ✅ |
+| `.sheet`, `.presentationDetents` | `show X`, `show X as half` | ✅ |
+| `.fullScreenCover` | `show X as full`, `cover X` | ✅ |
+| `.popover` | `show X as popover` | ✅ |
+| `.inspector` | `show X as inspector` | ✅ |
+| `.interactiveDismissDisabled` | `locked` | ✅ |
 | `@Environment(\.dismiss)` | `close`, `go back` | ✅ |
-| `.fileImporter` / `.fileExporter` | — | ⏳ |
+| `.alert`, `.confirmationDialog` | `alert "…" message "…"`, `ask "…"` + actions | ✅ |
+| `.toolbar`, `ToolbarItem(placement:)` | `toolbar`, `toolbar leading / title / bottom` | ✅ |
+| `.searchable`, `.searchSuggestions`, `.searchScopes` | `search … bind q suggest … scopes … scope s` | ✅ |
+| search tokens | — | ⏳ |
+| `scenePhase` | `on background`, `on foreground` | ✅ |
+| `Settings` scene | `screen Prefs settings` (⚙ button, ⌘,) | ✅ |
+| `openWindow` | `open window Screen with …` | ✅ |
+| `onOpenURL` | `on url` | ✅ |
+| `DocumentGroup` | `document a, b named "file.json"` (File menu, ⌘O, ⌘S) | ✅ |
+| `.fileImporter`, `.fileExporter` | `open file into x as json/text/image`, `save x to file "…"` | ✅ |
+| `RenameButton`, window sizing and placement, `MenuBarExtra` | — | ⏳ / ➖ |
+| App extensions, immersive spaces | — | ➖ |
 
 ## Data and storage
 
@@ -61,6 +78,7 @@ screen Home
 | computed properties | `computed` block | ✅ |
 | `@AppStorage`, `@SceneStorage` | `saved` after a state value | ✅ |
 | `.onChange(of:)` | `on change of value` (screen or app) | ✅ |
+| `scenePhase` | `on background` / `on foreground` | ✅ |
 | `.task { await … }`, `URLSession` | `on appear` + `load "url" into value` | ✅ |
 | SwiftData / Core Data | `saved` lists of records | 🟡 |
 

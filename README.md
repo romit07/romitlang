@@ -29,7 +29,7 @@ app Todos
     caption "{count of todos} to do"
 ```
 
-`romit build todos.rmt` produces one `index.html` you can open anywhere. See [Building apps](https://romitlang.org/ui-apps.html) and the [SwiftUI → Romit map](https://romitlang.org/reference/swiftui-map.html).
+`romit build todos.rmt` produces one `index.html` you can open anywhere. It looks native on each device: Apple style on iPhone, iPad and Mac, Material 3 on Android, Windows and Linux (or pick one with `theme` → `look material`). See [Building apps](https://romitlang.org/ui-apps.html) and the [SwiftUI → Romit map](https://romitlang.org/reference/swiftui-map.html).
 
 Current release line: **v0.0.2**
 
@@ -83,7 +83,7 @@ romit build examples/ui/landing.rmt
 |-----------|-------------|
 | `examples/beginner/` | Start here — scripts and optional specs |
 | `examples/advanced/` | Larger spec programs (brace-free); use `romit check --no-coverage` |
-| `examples/apps/` | SwiftUI-style apps: counter, todos, notes, showcase (`romit build` / `romit run`) |
+| `examples/apps/` | SwiftUI-style apps: counter, todos, notes, mail, showcase (`romit build` / `romit run`) |
 | `examples/ui/` | Static Romit UI pages (`romit build`) |
 | `examples/planned/` | Sketches of future syntax |
 | `examples/negative/` | Parser diagnostics (**P013**, **P001**, …) |

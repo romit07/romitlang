@@ -74,6 +74,7 @@
 | U115 | Unknown view, or wrong number of values passed to it |
 | U116 | Control is missing `bind`, `options`, or `to` |
 | U117 | State value uses another one before it is defined |
+| U118 | `document` problem: no `document` line, or it names something not in `state` |
 
 ## Warnings (W4xx)
 

@@ -1,0 +1,102 @@
+use ui
+
+note Mail: the app-structure tour. A sidebar (split view), toolbars in every place,
+note sheets of every size, popovers, an inspector, a settings screen, deep links,
+note files, and a document you can save and open.
+
+app Mail
+  theme
+    accent blue
+
+  state
+    folders is list "Inbox", "Starred", "Archive"
+    messages is list saved
+      from "Ada", subject "Engine notes", body "The analytical engine weaves algebraic patterns.", folder "Inbox", starred true
+      from "Grace", subject "Bug found", body "There was a moth in relay 70.", folder "Inbox", starred false
+      from "Alan", subject "Lunch?", body "Thursday works for me.", folder "Archive", starred false
+    query is ""
+    scope is "All"
+    draft is ""
+    signature is "Sent from Romit"
+    awayAt is ""
+
+  computed
+    unread is count of messages where folder is "Inbox"
+
+  document messages, signature named "mailbox.json"
+
+  on background
+    awayAt = "{now as time}"
+  on foreground
+    if awayAt is not empty
+      toast "Welcome back (away since {awayAt})"
+
+  screen Mailboxes "Mail" subtitle "{unread} in Inbox"
+    toolbar
+      button "Compose" icon "square.and.pencil" do show Compose as full
+    toolbar bottom
+      button "Import" icon "tray" do open file into messages as json
+      button "Export" icon "square.and.arrow.up" do save messages to file "messages.json"
+    sidebar
+      list
+        for each f in folders
+          link f to Folder with f
+            badge count of messages where folder is f
+    empty "Pick a mailbox" icon "envelope" message "Choose a folder on the left."
+
+  screen Folder with box titled box
+    toolbar
+      button "Filters" icon "line.3.horizontal" do show Filters as popover
+    search "Search mail" bind query suggest "Ada", "Grace", "Alan" scopes "All", "Starred" scope scope
+    list
+      for each m in messages where folder is box where subject contains query or from contains query where starred or scope is "All"
+        link to Message with m
+          column gap 2
+            subheading m.from
+            text m.subject
+            caption m.body
+              lines 1
+
+  screen Message with m titled m.subject subtitle m.from
+    toolbar
+      button "Info" icon "info.circle" do show Details with m as inspector
+      button "New window" icon "plus.square" do open window Message with m
+    toolbar title
+      text m.subject bold
+    text m.body selectable
+    caption signature
+    button "Move to Archive" do m.folder = "Archive"
+    button "Reply" do show Compose as half
+
+  screen Details with m "Details"
+    form
+      section "Message"
+        text "From: {m.from}"
+        text "Folder: {m.folder}"
+        toggle "Starred" bind m.starred
+
+  screen Filters "Filters"
+    picker "Show" bind scope options "All", "Starred"
+    button "Done" do close
+
+  screen Compose "New message"
+    toolbar
+      button "Send" do send
+        disabled if draft is empty
+    editor "Message" bind draft
+    caption signature
+
+  screen Prefs "Settings" settings
+    form
+      section "Signature"
+        field "Signature" bind signature
+      section "Mailbox file"
+        button "Save mailbox…" do save document
+        button "Open mailbox…" do open document
+        button "Start over" do new document
+
+  action send
+    add to messages with from "Me", subject draft, body draft, folder "Archive", starred false
+    draft = ""
+    close
+    toast "Sent"

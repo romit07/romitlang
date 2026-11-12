@@ -166,6 +166,8 @@ pub struct ExprParser<'a> {
     pub line_no: usize,
     /// When true, `,` ends the expression (record fields, argument lists).
     pub comma_stops: bool,
+    /// Inside a `where` condition: a later `where` / `sorted` belongs to the outer list.
+    in_where: usize,
 }
 
 type R<T> = Result<T, ExprError>;
@@ -183,6 +185,7 @@ impl<'a> ExprParser<'a> {
             stop,
             line_no,
             comma_stops: true,
+            in_where: 0,
         }
     }
 
@@ -440,10 +443,13 @@ impl<'a> ExprParser<'a> {
                 return self.err("expected a field name after `.`");
             }
             match self.peek_word() {
+                Some("where") | Some("sorted") if self.in_where > 0 => break,
                 Some("where") => {
                     self.pos += 1;
-                    let cond = self.parse_or()?;
-                    e = Expr::Where(Box::new(e), Box::new(cond));
+                    self.in_where += 1;
+                    let cond = self.parse_or();
+                    self.in_where -= 1;
+                    e = Expr::Where(Box::new(e), Box::new(cond?));
                 }
                 Some("sorted") => {
                     self.pos += 1;
@@ -743,6 +749,17 @@ mod tests {
         assert!(matches!(p("a is above 2 and b"), Expr::Bin(Op::And, _, _)));
         assert!(matches!(p("count of todos where not done"), Expr::Of(_, _)));
         assert!(matches!(p("todos where done"), Expr::Where(_, _)));
+        // chained filters apply to the list, not to the last value in the condition
+        match p("todos where folder is box where done sorted by title") {
+            Expr::SortBy(inner, _, _) => match *inner {
+                Expr::Where(list, cond) => {
+                    assert!(matches!(*list, Expr::Where(_, _)));
+                    assert!(matches!(*cond, Expr::Name(_)));
+                }
+                other => panic!("{other:?}"),
+            },
+            other => panic!("{other:?}"),
+        }
         assert!(matches!(p("price * 2 as money"), Expr::Bin(Op::Mul, _, _)));
         assert!(matches!(p("x is not empty"), Expr::IsEmpty(_, false)));
         assert!(matches!(p("list 1, 2, 3"), Expr::List(v) if v.len() == 3));
