@@ -66,6 +66,10 @@ cargo build --release
 ./target/release/romit --version
 ```
 
+## Editor support
+
+The [VS Code extension](editors/vscode) adds syntax highlighting, snippets, and Romit's indentation rules. It also works in Cursor, Windsurf and VSCodium. Install the `.vsix` from the [latest release](https://github.com/romit07/romitlang/releases/latest).
+
 ## Quick start
 
 ```bash

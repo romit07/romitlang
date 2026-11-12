@@ -1,0 +1,29 @@
+{
+  "comments": {
+    "lineComment": "#"
+  },
+  "brackets": [],
+  "autoClosingPairs": [
+    { "open": "\"", "close": "\"", "notIn": ["string"] },
+    { "open": "“", "close": "”", "notIn": ["string"] },
+    { "open": "{", "close": "}", "notIn": ["comment"] }
+  ],
+  "surroundingPairs": [
+    ["\"", "\""],
+    ["{", "}"]
+  ],
+  "wordPattern": "[A-Za-z_][A-Za-z0-9_]*|#[0-9a-fA-F]{3,8}|-?\\d+(\\.\\d+)?",
+  "indentationRules": {
+    "increaseIndentPattern": "^\\s*(app|screen|page|view|component|state|computed|derived|theme|toolbar|sidebar|action|fn|function|if|otherwise|else|for each|while|repeat|on|every|ask|confirm|animate|list|form|section|column|row|stack|grid|scroll|card|box|group|wrap|menu|disclosure|spec|rule|test|machine|output|entity|config)\\b.*$|^\\s*[A-Za-z_]\\w*:.*$",
+    "decreaseIndentPattern": "^\\s*(otherwise|else)\\b"
+  },
+  "onEnterRules": [
+    {
+      "beforeText": "^\\s*(#|note\\b).*$",
+      "action": { "indent": "none" }
+    }
+  ],
+  "folding": {
+    "offSide": true
+  }
+}

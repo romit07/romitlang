@@ -1,0 +1,134 @@
+{
+  "App": {
+    "prefix": "app",
+    "description": "A new Romit app with state and a screen",
+    "body": [
+      "use ui",
+      "",
+      "app ${1:MyApp}",
+      "  state",
+      "    ${2:count} is ${3:0}",
+      "",
+      "  screen ${4:Home} \"${5:Home}\"",
+      "    $0"
+    ]
+  },
+  "Screen": {
+    "prefix": "screen",
+    "description": "A screen (page) in an app",
+    "body": ["screen ${1:Detail} \"${2:Title}\"", "  $0"]
+  },
+  "Screen with value": {
+    "prefix": "screenwith",
+    "description": "A screen that receives a value, like a NavigationLink destination",
+    "body": ["screen ${1:Detail} with ${2:item} titled ${2:item}.${3:title}", "  $0"]
+  },
+  "State": {
+    "prefix": "state",
+    "description": "State values the UI reads and changes",
+    "body": ["state", "  ${1:name} is ${2:\"\"}", "  ${3:items} is list saved"]
+  },
+  "Computed": {
+    "prefix": "computed",
+    "description": "Values worked out from state",
+    "body": ["computed", "  ${1:left} is count of ${2:items} where not ${3:done}"]
+  },
+  "Button": {
+    "prefix": "button",
+    "description": "A button with one action",
+    "body": ["button \"${1:Save}\" do ${2:count += 1}"]
+  },
+  "Button with actions": {
+    "prefix": "buttonon",
+    "description": "A button with several actions",
+    "body": ["button \"${1:Save}\"", "  on tap", "    ${2:toast \"Saved\"}", "    $0"]
+  },
+  "List of items": {
+    "prefix": "list",
+    "description": "A list that shows each item",
+    "body": [
+      "list",
+      "  for each ${1:item} in ${2:items}",
+      "    text ${1:item}.${3:title}",
+      "      on delete do remove ${1:item} from ${2:items}"
+    ]
+  },
+  "For each": {
+    "prefix": "foreach",
+    "description": "Repeat for each item",
+    "body": ["for each ${1:item} in ${2:items}", "  $0"]
+  },
+  "If / otherwise": {
+    "prefix": "if",
+    "description": "Show or do something conditionally",
+    "body": ["if ${1:condition}", "  $2", "otherwise", "  $0"]
+  },
+  "Field": {
+    "prefix": "field",
+    "description": "A text field bound to state",
+    "body": ["field \"${1:Name}\" bind ${2:name}"]
+  },
+  "Toggle": {
+    "prefix": "toggle",
+    "description": "A switch bound to state",
+    "body": ["toggle \"${1:Dark mode}\" bind ${2:darkMode}"]
+  },
+  "Picker": {
+    "prefix": "picker",
+    "description": "Choose one option",
+    "body": ["picker \"${1:Size}\" bind ${2:cupSize} options ${3:\"S\", \"M\", \"L\"}"]
+  },
+  "Tabs": {
+    "prefix": "tabs",
+    "description": "Two screens shown as tabs",
+    "body": [
+      "screen ${1:Home} \"${1:Home}\" tab \"house\"",
+      "  $0",
+      "",
+      "screen ${2:Settings} \"${2:Settings}\" tab \"gear\""
+    ]
+  },
+  "Split view": {
+    "prefix": "sidebar",
+    "description": "Sidebar + detail (NavigationSplitView)",
+    "body": [
+      "screen ${1:Library} \"${2:Library}\"",
+      "  sidebar",
+      "    list",
+      "      for each ${3:f} in ${4:folders}",
+      "        link ${3:f} to ${5:Folder} with ${3:f}",
+      "  empty \"Pick one\" icon \"sidebar.left\""
+    ]
+  },
+  "Action": {
+    "prefix": "action",
+    "description": "A reusable list of steps",
+    "body": ["action ${1:reset}", "  ${2:count = 0}"]
+  },
+  "Function": {
+    "prefix": "fn",
+    "description": "A script function that gives back a value",
+    "body": ["fn ${1:double} ${2:n}", "  give ${2:n} times 2"]
+  },
+  "Spec": {
+    "prefix": "spec",
+    "description": "A spec with an event, a rule, and a test",
+    "body": [
+      "spec ${1:Counter} version 1",
+      "",
+      "state",
+      "  ${2:count} int is 0",
+      "",
+      "event ${3:Tap}",
+      "",
+      "on ${3:Tap}",
+      "  rule ${4:add_one}",
+      "    when true",
+      "    set ${2:count} to ${2:count} plus 1",
+      "",
+      "test ${5:tap_once}",
+      "  send ${3:Tap}",
+      "  expect ${2:count} is 1"
+    ]
+  }
+}

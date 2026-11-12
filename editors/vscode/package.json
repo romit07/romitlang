@@ -1,0 +1,84 @@
+{
+  "name": "romit",
+  "displayName": "Romit",
+  "description": "Syntax highlighting, snippets, and editor settings for the Romit language (.rmt): write apps the way you write prompts.",
+  "version": "0.0.3",
+  "publisher": "romitlang",
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "homepage": "https://romitlang.org/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/romit07/romitlang.git",
+    "directory": "editors/vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/romit07/romitlang/issues"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "keywords": [
+    "romit",
+    "rmt",
+    "ui",
+    "swiftui",
+    "no-code",
+    "vibe coding"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "romit",
+        "aliases": [
+          "Romit",
+          "romit"
+        ],
+        "extensions": [
+          ".rmt"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./images/file-icon.svg",
+          "dark": "./images/file-icon.svg"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "romit",
+        "scopeName": "source.romit",
+        "path": "./syntaxes/romit.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "romit",
+        "path": "./snippets/romit.code-snippets"
+      }
+    ],
+    "configurationDefaults": {
+      "[romit]": {
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true,
+        "editor.detectIndentation": false,
+        "editor.autoIndent": "keep",
+        "editor.wordBasedSuggestions": "currentDocument",
+        "files.trimTrailingWhitespace": true
+      }
+    }
+  },
+  "scripts": {
+    "build-grammar": "python3 scripts/build_grammar.py",
+    "test": "node test/grammar.test.js",
+    "package": "npx --yes @vscode/vsce@3 package --no-dependencies"
+  },
+  "devDependencies": {
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.2.0"
+  }
+}
