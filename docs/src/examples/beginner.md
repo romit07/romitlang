@@ -5,6 +5,18 @@ These programs live in the repository under `examples/beginner/`.
 - Scripts: `romit run examples/beginner/hello.rmt`
 - Specs with tests: `romit test examples/beginner/<name>.rmt`
 
+## lists.rmt
+
+```text
+groceries = list "milk", "eggs"
+add "bread" to groceries
+names = join groceries, ", "
+say "You need {count of groceries} things: {names}"
+
+for each item in groceries
+  say "- {upper item}"
+```
+
 ## hello.rmt
 
 ```text

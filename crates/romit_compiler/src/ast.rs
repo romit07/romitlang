@@ -87,9 +87,24 @@ pub enum ScriptStmt {
         body: Vec<ScriptStmt>,
         span: Span,
     },
+    /// `for each fruit in fruits`
+    ForEachList {
+        var: String,
+        list: Expr,
+        body: Vec<ScriptStmt>,
+        span: Span,
+    },
     While {
         cond: Expr,
         body: Vec<ScriptStmt>,
+        span: Span,
+    },
+    /// `stop` — leave the innermost loop.
+    Stop {
+        span: Span,
+    },
+    /// `skip` — continue with the next loop pass.
+    Skip {
         span: Span,
     },
     Give {

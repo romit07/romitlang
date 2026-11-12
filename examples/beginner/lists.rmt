@@ -1,0 +1,17 @@
+# Lists, text, and decimals — no brackets needed.
+groceries = list "milk", "eggs"
+add "bread" to groceries
+names = join groceries, ", "
+say "You need {count of groceries} things: {names}"
+
+for each item in groceries
+  say "- {upper item}"
+
+prices = list 2.5, 3, 1.25
+say "Total: {sum of prices}"
+say "Average: {round average of prices, 2}"
+
+score = 10
+score += 5
+increase score by 1
+say "Score {score}, half is {score / 2}"

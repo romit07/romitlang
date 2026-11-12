@@ -19,7 +19,6 @@ pub fn is_keyword(word: &str) -> bool {
             | "machine"
             | "on"
             | "if"
-            | "all"
             | "rule"
             | "when"
             | "otherwise"
@@ -59,7 +58,6 @@ pub fn is_keyword(word: &str) -> bool {
             | "is"
             | "above"
             | "below"
-            | "at"
             | "least"
             | "emitted"
             | "rejected"
@@ -67,7 +65,6 @@ pub fn is_keyword(word: &str) -> bool {
             | "outputs"
             | "of"
             | "call"
-            | "otherwise"
             | "give"
             | "repeat"
             | "times"
@@ -78,7 +75,5 @@ pub fn is_keyword(word: &str) -> bool {
             | "more"
             | "less"
             | "than"
-            | "least"
-            | "most"
     )
 }

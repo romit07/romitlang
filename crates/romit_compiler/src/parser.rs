@@ -338,8 +338,22 @@ impl Parser {
                     return Err(self.err_here("'in' after loop variable"));
                 }
                 let from = self.parse_range_endpoint()?;
+                if self.at_line_end() {
+                    self.skip_newlines();
+                    self.expect_indent()?;
+                    let body = self.parse_script_block(in_fn)?;
+                    self.expect_dedent()?;
+                    return Ok(ScriptStmt::ForEachList {
+                        var,
+                        list: from,
+                        body,
+                        span: stmt_span,
+                    });
+                }
                 if self.word()? != "to" {
-                    return Err(self.err_here("'to' after range start (e.g. `1 to 5`)"));
+                    return Err(
+                        self.err_here("'to' after range start (e.g. `1 to 5`), or a list name")
+                    );
                 }
                 let to = self.parse_range_endpoint()?;
                 self.skip_newlines();
@@ -367,16 +381,93 @@ impl Parser {
                     span: stmt_span,
                 })
             }
+            "stop" | "skip" if self.next_is_line_end(1) => {
+                self.bump();
+                Ok(if head == "stop" {
+                    ScriptStmt::Stop { span: stmt_span }
+                } else {
+                    ScriptStmt::Skip { span: stmt_span }
+                })
+            }
+            // `increase score by 10` / `decrease lives by 1`
+            "increase" | "decrease"
+                if matches!(
+                    self.tokens.get(self.pos + 1).map(|t| &t.kind),
+                    Some(TokenKind::Ident(_))
+                ) =>
+            {
+                self.bump();
+                let name = self.word()?;
+                let amount = if self.peek_word().as_deref() == Some("by") {
+                    self.bump();
+                    self.parse_expr_until_line()?
+                } else {
+                    Expr::Literal(Literal::Int(1), stmt_span.clone())
+                };
+                let op = if head == "increase" {
+                    BinaryOp::Add
+                } else {
+                    BinaryOp::Sub
+                };
+                Ok(self.compound_set(name, op, amount, stmt_span))
+            }
+            // `add "milk" to groceries` / `remove "milk" from groceries`
+            "add" | "remove" if self.line_has_word(if head == "add" { "to" } else { "from" }) => {
+                self.bump();
+                let joiner = if head == "add" { "to" } else { "from" };
+                self.expr_stop_word = Some(joiner.into());
+                let item = self.parse_expr_until_line();
+                self.expr_stop_word = None;
+                let item = item?;
+                if self.word()? != joiner {
+                    return Err(self.err_here(&format!("'{joiner}' before the list name")));
+                }
+                let name = self.word()?;
+                let list = Expr::Path(
+                    PathExpr {
+                        parts: vec![name.clone()],
+                        span: stmt_span.clone(),
+                    },
+                    stmt_span.clone(),
+                );
+                let value = Expr::Call {
+                    name: if head == "add" {
+                        "__append".into()
+                    } else {
+                        "__remove".into()
+                    },
+                    args: vec![list, item],
+                    named: Vec::new(),
+                    span: stmt_span.clone(),
+                };
+                Ok(ScriptStmt::Set {
+                    name,
+                    value,
+                    span: stmt_span,
+                })
+            }
             _ => {
-                let assign = self
-                    .tokens
-                    .get(self.pos + 1)
-                    .is_some_and(|t| matches!(t.kind, TokenKind::Assign));
+                let next = self.tokens.get(self.pos + 1).map(|t| t.kind.clone());
+                if matches!(
+                    next,
+                    Some(TokenKind::PlusAssign) | Some(TokenKind::MinusAssign)
+                ) {
+                    self.bump();
+                    self.bump();
+                    let amount = self.parse_expr_until_line()?;
+                    let op = if matches!(next, Some(TokenKind::PlusAssign)) {
+                        BinaryOp::Add
+                    } else {
+                        BinaryOp::Sub
+                    };
+                    return Ok(self.compound_set(head, op, amount, stmt_span));
+                }
+                let assign = matches!(next, Some(TokenKind::Assign));
                 if !assign {
                     return Err(self
                         .err_here("a script statement")
                         .with_help(
-                            "try `say`, `set`, `if`, `to` for functions, `repeat N times`, `for each x in 1 to 5`, or `while`",
+                            "try `say`, `x = 5`, `if`, `fn name a, b`, `repeat N times`, `for each x in 1 to 5`, `for each item in items`, `add x to items`, or `while`",
                         ));
                 }
                 let name = head;
@@ -390,6 +481,50 @@ impl Parser {
                 })
             }
         }
+    }
+
+    fn compound_set(&self, name: String, op: BinaryOp, amount: Expr, span: Span) -> ScriptStmt {
+        let current = Expr::Path(
+            PathExpr {
+                parts: vec![name.clone()],
+                span: span.clone(),
+            },
+            span.clone(),
+        );
+        ScriptStmt::Set {
+            name,
+            value: Expr::Binary {
+                op,
+                left: Box::new(current),
+                right: Box::new(amount),
+                span: span.clone(),
+            },
+            span,
+        }
+    }
+
+    fn next_is_line_end(&self, ahead: usize) -> bool {
+        matches!(
+            self.tokens.get(self.pos + ahead).map(|t| &t.kind),
+            None | Some(TokenKind::Newline)
+                | Some(TokenKind::Dedent)
+                | Some(TokenKind::Eof)
+                | Some(TokenKind::Indent)
+        )
+    }
+
+    fn line_has_word(&self, word: &str) -> bool {
+        let mut i = self.pos;
+        while let Some(t) = self.tokens.get(i) {
+            match &t.kind {
+                TokenKind::Newline | TokenKind::Eof | TokenKind::Indent | TokenKind::Dedent => {
+                    return false
+                }
+                TokenKind::Ident(w) if w == word => return true,
+                _ => i += 1,
+            }
+        }
+        false
     }
 
     fn parse_script_if_chain(
@@ -512,7 +647,11 @@ impl Parser {
     }
 
     fn parse_say_part_expr(&mut self, rest_of_line: bool) -> Result<Expr, Diagnostic> {
-        if let Some(w) = self.peek_word() {
+        let item_of = matches!(
+            self.tokens.get(self.pos + 2).map(|t| &t.kind),
+            Some(TokenKind::Ident(ref of)) if of == "of"
+        ) && self.peek_word().as_deref() == Some("item");
+        if let Some(w) = self.peek_word().filter(|_| !item_of) {
             if user_callable_name(&w) {
                 let saved_pos = self.pos;
                 let name = self.word()?;
@@ -952,6 +1091,9 @@ impl Parser {
                         self.bump();
                         continue;
                     }
+                    if bw == "stores" {
+                        break;
+                    }
                 }
                 let pname = self.word()?;
                 let pty = Type::Named(self.word()?);
@@ -962,8 +1104,11 @@ impl Parser {
                 });
             }
         }
-        self.skip_newlines();
-        if matches!(self.peek().kind, TokenKind::Indent) {
+        let inline_stores = self.peek_word().as_deref() == Some("stores");
+        if !inline_stores {
+            self.skip_newlines();
+        }
+        if !inline_stores && matches!(self.peek().kind, TokenKind::Indent) {
             self.bump();
             while !matches!(self.peek().kind, TokenKind::Dedent | TokenKind::Eof) {
                 self.skip_newlines();
@@ -1469,6 +1614,9 @@ impl Parser {
             self.peek().kind,
             TokenKind::Newline | TokenKind::Dedent | TokenKind::Eof | TokenKind::Indent
         ) || (self.list_item_mode && matches!(self.peek().kind, TokenKind::Comma))
+            || (self.expr_stop_word.is_some()
+                && self.expr_stop_word.as_deref() != Some("times")
+                && self.peek_word() == self.expr_stop_word)
     }
 
     fn at_physical_line_end(&self) -> bool {
@@ -1571,9 +1719,31 @@ impl Parser {
             if self.at_line_end() {
                 break;
             }
+            if matches!(self.peek_word().as_deref(), Some("contains") | Some("has")) {
+                let span = self.span();
+                self.bump();
+                let r = self.parse_add_line()?;
+                e = Expr::Binary {
+                    op: BinaryOp::In,
+                    left: Box::new(r),
+                    right: Box::new(e),
+                    span,
+                };
+                continue;
+            }
             let op = if self.peek_word() == Some("is".into()) {
                 self.bump();
-                self.comparison_op_after_is()
+                if self.peek_word() == Some("in".into()) {
+                    self.bump();
+                    BinaryOp::In
+                } else {
+                    self.comparison_op_after_is()
+                }
+            } else if self.peek_word() == Some("in".into())
+                && self.expr_stop_word.as_deref() != Some("in")
+            {
+                self.bump();
+                BinaryOp::In
             } else if self.peek_word() == Some("above".into()) {
                 self.bump();
                 BinaryOp::Gt
@@ -1734,10 +1904,10 @@ impl Parser {
                 break;
             }
             if let Expr::Path(p, path_span) = &e {
-                if p.parts.len() == 1 && user_callable_name(&p.parts[0]) {
-                    if !self.looks_like_call_suffix() {
-                        break;
-                    }
+                if p.parts.len() == 1
+                    && user_callable_name(&p.parts[0])
+                    && self.looks_like_call_suffix()
+                {
                     let name = p.parts[0].clone();
                     let call_span = Span {
                         line: path_span.line,
@@ -2183,10 +2353,28 @@ impl Parser {
             });
         }
         if let Some(w) = self.peek_word() {
+            if w == "item"
+                && matches!(
+                    self.tokens.get(self.pos + 2).map(|t| &t.kind),
+                    Some(TokenKind::Ident(ref of)) if of == "of"
+                )
+            {
+                // `item 2 of fruits` — 1-based position
+                self.bump();
+                let index = self.parse_expr_primary()?;
+                self.bump(); // of
+                let list = self.parse_unary_line()?;
+                return Ok(Expr::Call {
+                    name: "item".into(),
+                    args: vec![index, list],
+                    named: Vec::new(),
+                    span,
+                });
+            }
             if matches!(w.as_str(), "count" | "sum" | "min" | "max" | "any")
                 && matches!(
                     self.tokens.get(self.pos + 1).map(|t| &t.kind),
-                    Some(TokenKind::Ident(_))
+                    Some(TokenKind::Ident(ref nx)) if nx != "of"
                 )
             {
                 self.bump();
@@ -2223,6 +2411,7 @@ impl Parser {
     fn parse_expr_primary(&mut self) -> Result<Expr, Diagnostic> {
         let span = self.span();
         match self.bump().kind {
+            TokenKind::String(s) if s.contains('{') => self.interpolate(&s, span),
             TokenKind::String(s) | TokenKind::Color(s) => Ok(Expr::Literal(Literal::Text(s), span)),
             TokenKind::Int(n) => Ok(Expr::Literal(Literal::Int(n), span)),
             TokenKind::Decimal(d) => Ok(Expr::Literal(Literal::Decimal(d), span)),
@@ -2230,7 +2419,7 @@ impl Parser {
                 Ok(Expr::Literal(Literal::Bool(s == "true"), span))
             }
             TokenKind::Ident(s) => {
-                let mut parts = vec![s];
+                let parts = vec![s];
                 if matches!(self.peek().kind, TokenKind::Dot) {
                     let p = self.parse_path_tail(parts, span.clone())?;
                     return Ok(Expr::Path(p, span));
@@ -2263,6 +2452,103 @@ impl Parser {
                 snippet_at(&self.source, self.peek().line, self.peek().column, "expr"),
             )),
         }
+    }
+
+    /// `"Hi {name}, you have {count of items} items"` → text + expr + text …
+    fn interpolate(&mut self, s: &str, span: Span) -> Result<Expr, Diagnostic> {
+        let mut parts: Vec<Expr> = Vec::new();
+        let mut lit = String::new();
+        let mut chars = s.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '{' {
+                if chars.peek() == Some(&'{') {
+                    chars.next();
+                    lit.push('{');
+                    continue;
+                }
+                let mut inner = String::new();
+                let mut closed = false;
+                for c2 in chars.by_ref() {
+                    if c2 == '}' {
+                        closed = true;
+                        break;
+                    }
+                    inner.push(c2);
+                }
+                if !closed {
+                    return Err(Diagnostic::error(
+                        "P029",
+                        "`{` in a string needs a matching `}`",
+                        &self.file,
+                        span.line,
+                        span.column,
+                        snippet_at(&self.source, span.line, span.column, "{"),
+                    )
+                    .with_help("write `\"Hi {name}\"`, or `{{` for a literal brace"));
+                }
+                if !lit.is_empty() {
+                    parts.push(Expr::Literal(
+                        Literal::Text(std::mem::take(&mut lit)),
+                        span.clone(),
+                    ));
+                }
+                parts.push(self.parse_fragment(inner.trim(), &span)?);
+            } else if c == '}' && chars.peek() == Some(&'}') {
+                chars.next();
+                lit.push('}');
+            } else {
+                lit.push(c);
+            }
+        }
+        if !lit.is_empty() {
+            parts.push(Expr::Literal(Literal::Text(lit), span.clone()));
+        }
+        // Start with "" so `+` always means text joining.
+        let mut e = Expr::Literal(Literal::Text(String::new()), span.clone());
+        for p in parts {
+            e = Expr::Binary {
+                op: BinaryOp::Add,
+                left: Box::new(e),
+                right: Box::new(p),
+                span: span.clone(),
+            };
+        }
+        Ok(e)
+    }
+
+    fn parse_fragment(&self, text: &str, span: &Span) -> Result<Expr, Diagnostic> {
+        let relocate = |mut d: Diagnostic| {
+            d.file = self.file.clone();
+            d.line = span.line;
+            d.column = span.column;
+            d.snippet = snippet_at(&self.source, span.line, span.column, "{");
+            d
+        };
+        let mut lexer = Lexer::new(format!("{text}\n"));
+        let tokens = lexer.tokenize(&self.file).map_err(relocate)?;
+        let mut tokens: Vec<Token> = tokens
+            .into_iter()
+            .map(|mut t| {
+                t.line = span.line;
+                t.column = span.column;
+                t
+            })
+            .collect();
+        tokens.retain(|t| !matches!(t.kind, TokenKind::Indent | TokenKind::Dedent));
+        let mut sub = Parser {
+            file: self.file.clone(),
+            source: self.source.clone(),
+            tokens,
+            pos: 0,
+            errors: Vec::new(),
+            list_item_mode: false,
+            expr_stop_word: None,
+        };
+        let e = sub.parse_expr_until_line().map_err(relocate)?;
+        if !sub.at_physical_line_end() {
+            return Err(relocate(sub.err_here("end of `{…}` expression")));
+        }
+        Ok(e)
     }
 
     fn parse_path_tail(
@@ -2320,7 +2606,10 @@ fn user_callable_name(name: &str) -> bool {
 fn call_arg_stop_word(word: &str) -> bool {
     matches!(
         word,
-        "say"
+        "of" | "from"
+            | "contains"
+            | "has"
+            | "say"
             | "print"
             | "set"
             | "to"
