@@ -97,6 +97,37 @@ pub fn run_program(source: &str) -> String {
     serde_json::to_string(&resp).unwrap_or_else(|_| "{\"ok\":false}".into())
 }
 
+#[derive(Serialize)]
+struct UiResponse {
+    ok: bool,
+    html: String,
+    diagnostics: String,
+}
+
+/// True when the source is a Romit UI file (`use ui`) that should be previewed, not run.
+#[wasm_bindgen]
+pub fn is_ui_program(source: &str) -> bool {
+    romit_ui::is_ui_source(source)
+}
+
+/// Compile a `use ui` file (app or page) to one HTML document for a live preview.
+#[wasm_bindgen]
+pub fn build_ui_program(source: &str) -> String {
+    let resp = match romit_ui::preview_html(source, "playground.rmt") {
+        Ok(html) => UiResponse {
+            ok: true,
+            html,
+            diagnostics: String::new(),
+        },
+        Err(diags) => UiResponse {
+            ok: false,
+            html: String::new(),
+            diagnostics: romit_ui::format_diagnostics(&diags),
+        },
+    };
+    serde_json::to_string(&resp).unwrap_or_else(|_| "{\"ok\":false}".into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,5 +138,14 @@ mod tests {
         let json = run_program(src);
         assert!(json.contains("Hello, world!"));
         assert!(json.contains("\"ok\":true"));
+    }
+
+    #[test]
+    fn ui_app_preview_json() {
+        let src = "use ui\nstate\n  n is 0\nscreen Home\n  button \"+\" do n += 1\n";
+        assert!(is_ui_program(src));
+        let json = build_ui_program(src);
+        assert!(json.contains("\"ok\":true"), "{json}");
+        assert!(json.contains("R.start()"));
     }
 }

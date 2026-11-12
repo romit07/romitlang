@@ -1,8 +1,25 @@
 # Romit UI
 
-Romit UI is a **separate framework** from the core language. UI pages start with `use ui` and compile to static HTML and CSS. Browsers never read `.rmt` files.
+Romit UI files start with `use ui`. There are two kinds:
 
-## What works today (MVP)
+- **Apps** (`app`, `state`, `screen`): reactive, SwiftUI-style interfaces with state, layout stacks, controls, navigation, tabs, sheets, and saved data. `romit build` writes one self-contained `index.html`. See **[Building apps](ui-apps.md)** and **[SwiftUI → Romit](reference/swiftui-map.md)**.
+- **Pages** (`page`): static marketing-style pages compiled to HTML and CSS with no JavaScript, described below.
+
+Browsers never read `.rmt` files.
+
+```text
+use ui
+
+state
+  name is ""
+
+screen Home
+  field "Your name" bind name
+  text "Hello, {name}!" bold
+    hidden if name is empty
+```
+
+## Static pages
 
 - **Parts:** `page`, `header`, `brand`, `nav`, `hero`, `title`, `text`, `section`, `card`, `button`, `image`, `link`, `footer`, and page-level `theme`.
 - **`romit build landing.rmt`** — writes `dist/index.html` and `dist/style.css` (or `--out DIR`).
@@ -65,15 +82,13 @@ flowchart LR
 
 The compiler parses indentation-based UI syntax, validates parts (**U001** lists valid names), resolves theme tokens (**U006** lists valid tokens), and emits plain static assets. There is no client-side Romit runtime in the MVP.
 
-## Planned (not in MVP)
+## Planned
 
-- Reactive `state` and event handlers (`on click`, live updates).
-- `view` components, `column` / `row` layout, and richer modifiers.
-- JavaScript bundle for interactivity.
-- Multi-page sites and asset pipelines.
-- Integration with full **spec** programs in one file.
+- Multi-page static sites and asset pipelines.
+- Running **spec** rules inside apps.
+- Native (iOS / Android) output for apps.
 
-Older sketches under `examples/planned/` describe that future direction. The Stage 4 roadmap in [Roadmap](reference/roadmap.md) covers the rest.
+The Stage 4 roadmap in [Roadmap](reference/roadmap.md) covers the rest.
 
 ## Errors
 
@@ -85,5 +100,6 @@ Older sketches under `examples/planned/` describe that future direction. The Sta
 | U006 | Unknown theme token |
 | U007 | Template file problem |
 | U008 | Output write error |
+| U101–U117 | App errors; see [Error codes](reference/errors.md) |
 
 See [Error codes](reference/errors.md) for parser codes shared with the core language.

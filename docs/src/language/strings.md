@@ -1,23 +1,26 @@
 # Strings and interpolation
 
-String interpolation does not use `{` or `}`. Use **adjacent words** after a string literal (the value is concatenated in order):
+Put a value inside text with `{…}`, the way you would write it in a prompt:
 
 ```text
-note documented join form (v0.3):
-say "Hello" name
+name = "Ada"
+say "Hello, {name}! You have {count of tasks} tasks."
 ```
 
-equivalent to building the message from `"Hello "` and the value of `name`. The longer spelling is:
+Anything that works as an expression works inside the braces: `"{price * 2}"`, `"{upper name}"`. Write `{{` or `}}` for a literal brace. Braces are only allowed **inside text**. Code structure stays brace-free (**P013**).
+
+You can also join text with `+` or `plus`:
 
 ```text
-"Hello " join name
+say "Hello, " + name
+greeting = "Hi " plus name
 ```
 
-Only one of these forms is required in source; this book uses `say "Hello" name` in examples.
-
-In scripts, you can also print several space-separated parts; they are concatenated in order:
+In `say` and `print`, adjacent parts are joined in order:
 
 ```text
 set total to 14
 say "Total: " total
 ```
+
+See [Lists, text, and numbers](lists.md) for `upper`, `lower`, `trim`, `join`, and `split`.

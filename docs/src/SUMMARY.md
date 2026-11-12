@@ -21,7 +21,8 @@
 # Romit UI
 
 - [UI framework](ui-framework.md)
-- [Templates and overrides](ui-templates.md)
+- [Building apps (SwiftUI-style)](ui-apps.md)
+- [Static pages: templates and overrides](ui-templates.md)
 
 # Language guide
 
@@ -31,6 +32,7 @@
 - [Functions and calls](language/functions.md)
 - [Operators](language/operators.md)
 - [Strings and join](language/strings.md)
+- [Lists, text, and numbers](language/lists.md)
 - [Optional spec layer](language/spec-layer.md)
 
 # Examples
@@ -41,6 +43,7 @@
 
 # Reference
 
+- [SwiftUI → Romit](reference/swiftui-map.md)
 - [Swift feature map](reference/swift-feature-map.md)
 - [Error codes](reference/errors.md)
 - [Roadmap](reference/roadmap.md)

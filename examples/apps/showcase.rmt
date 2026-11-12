@@ -1,0 +1,92 @@
+use ui
+
+note A tour of Romit UI: tabs, forms, every control, grids, sheets, timers, and dark mode.
+
+app Showcase
+  theme
+    accent purple
+    dark when darkMode
+
+  state
+    name is "Ada" saved
+    darkMode is false saved
+    volume is 40
+    servings is 2
+    cupSize is "M"
+    flavor is "Vanilla"
+    due is today
+    tintColor is "#af52de"
+    seconds is 0
+    running is false
+    liked is list
+    notes is ""
+    photos is list "🌅", "🏔️", "🌊", "🌲", "🏜️", "🌋"
+
+  computed
+    greeting is "Hello, {name}!"
+    minutes is floor of seconds / 60
+
+  screen Home "Home" tab "house"
+    card greeting "Edit your name in Settings"
+    row gap 12
+      gauge volume of 100 "Volume"
+      column gap 4
+        subheading "Timer"
+        text "{minutes}:{seconds remainder 60}" size 34 mono
+        row
+          button "Start" do running = true
+            style prominent
+            hidden if running
+          button "Pause" do running = false
+            hidden if not running
+          button "Reset" do seconds = 0
+    progress volume of 100
+    every 1 second
+      if running
+        seconds += 1
+
+  screen Gallery "Gallery" tab "photo"
+    caption "Tap a photo to like it. {count of liked} liked."
+    grid 3 gap 10
+      for each p in photos
+        stack
+          rounded
+            fill surface
+            height 100
+          text p size 44
+          if liked contains p
+            icon "heart.fill" color pink
+              offset 36 -32
+          on tap
+            if liked contains p
+              remove p from liked
+            otherwise
+              add p to liked
+    button "Shuffle" icon "arrow.clockwise" do shuffle photos
+    button "About this app" do show About
+
+  screen Settings "Settings" tab "gear"
+    form
+      section "Profile" footer "Your name is saved on this device."
+        field "Name" bind name
+        toggle "Dark mode" bind darkMode
+      section "Order"
+        picker "Size" bind cupSize options "S", "M", "L", "XL"
+        picker "Flavor" bind flavor options "Vanilla", "Chocolate", "Strawberry", "Mint", "Coffee"
+        stepper "Servings" bind servings from 1 to 8
+        slider "Volume" bind volume from 0 to 100 step 5
+        date "Due" bind due
+        colorpicker "Tint" bind tintColor
+      section "Notes"
+        editor "Anything else?" bind notes
+    button "Place order" do alert "Ordered {servings} × {cupSize} {flavor}" message "Due {due as date}"
+      style prominent
+      stretch
+
+  screen About "About"
+    column gap 12 center
+      icon "sparkles" size 56
+      heading "Built with Romit"
+      text "This whole app is one .rmt file." color secondary
+      link "Romit on GitHub" to "https://github.com/romit07/romitlang"
+      button "Close" do close

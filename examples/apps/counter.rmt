@@ -1,0 +1,19 @@
+use ui
+
+app Counter
+  state
+    count is 0
+    step is 1
+
+  screen Home "Counter"
+    column center gap 20
+      text "{count}" size 72 bold
+        color red if count is below 0
+      row gap 12
+        button "−" do count -= step
+        button "Reset" do count = 0
+          style bordered
+          disabled if count is 0
+        button "+" do count += step
+          style prominent
+      stepper "Step" bind step from 1 to 10

@@ -11,6 +11,10 @@ pub enum Value {
     Money(i64),
     Bool(bool),
     Enum(String),
+    /// Decimal number (`1.5`, `7 / 2`).
+    Float(f64),
+    /// Ordered list (`list 1, 2, 3`).
+    List(Vec<Value>),
     Null,
 }
 
@@ -718,16 +722,28 @@ fn check_expect(interp: &Interpreter, rt: &RuntimeState, ex: &Expect, result: &S
     }
 }
 
+fn as_num(v: &Value) -> Option<f64> {
+    match v {
+        Value::Int(n) | Value::Money(n) => Some(*n as f64),
+        Value::Float(f) => Some(*f),
+        _ => None,
+    }
+}
+
 fn values_equal(a: &Value, b: &Value) -> bool {
+    if let (Some(x), Some(y)) = (as_num(a), as_num(b)) {
+        return x == y;
+    }
     match (a, b) {
         (Value::Text(x), Value::Text(y)) => x == y,
-        (Value::Int(x), Value::Int(y)) => x == y,
-        (Value::Money(x), Value::Money(y)) => x == y,
-        (Value::Int(x), Value::Money(y)) | (Value::Money(x), Value::Int(y)) => x == y,
         (Value::Bool(x), Value::Bool(y)) => x == y,
         (Value::Enum(x), Value::Enum(y)) => x == y,
         (Value::Text(x), Value::Enum(y)) => x == y,
         (Value::Enum(x), Value::Text(y)) => x == y,
+        (Value::List(x), Value::List(y)) => {
+            x.len() == y.len() && x.iter().zip(y).all(|(a, b)| values_equal(a, b))
+        }
+        (Value::Null, Value::Null) => true,
         _ => false,
     }
 }
@@ -735,7 +751,7 @@ fn values_equal(a: &Value, b: &Value) -> bool {
 fn literal_to_value(l: &Literal) -> Value {
     match l {
         Literal::Int(n) => Value::Int(*n),
-        Literal::Decimal(s) => Value::Money(s.parse().unwrap_or(0)),
+        Literal::Decimal(s) => Value::Float(s.parse().unwrap_or(0.0)),
         Literal::Text(s) => Value::Text(s.clone()),
         Literal::Bool(b) => Value::Bool(*b),
         Literal::Enum(s) => Value::Enum(s.clone()),
@@ -756,6 +772,9 @@ fn truthy(v: &Value) -> bool {
         Value::Bool(b) => *b,
         Value::Null => false,
         Value::Int(0) => false,
+        Value::Float(f) => *f != 0.0,
+        Value::Text(s) => !s.is_empty(),
+        Value::List(l) => !l.is_empty(),
         _ => true,
     }
 }
@@ -764,6 +783,7 @@ fn neg_value(v: Value) -> Value {
     match v {
         Value::Int(n) => Value::Int(-n),
         Value::Money(m) => Value::Money(-m),
+        Value::Float(f) => Value::Float(-f),
         _ => v,
     }
 }
@@ -780,7 +800,12 @@ fn eval_binary(op: &BinaryOp, l: &Value, r: &Value) -> Value {
         BinaryOp::Mul => mul_values(l, r),
         BinaryOp::Div => div_values(l, r),
         BinaryOp::Mod => mod_values(l, r),
-        BinaryOp::In => Value::Bool(false),
+        // `x in list` / `"ell" in "hello"`
+        BinaryOp::In => Value::Bool(match r {
+            Value::List(items) => items.iter().any(|it| values_equal(it, l)),
+            Value::Text(hay) => hay.contains(&value_to_display(l)),
+            _ => false,
+        }),
     }
 }
 
@@ -788,48 +813,106 @@ fn to_i64(v: &Value) -> i64 {
     match v {
         Value::Int(n) => *n,
         Value::Money(n) => *n,
+        Value::Float(f) => *f as i64,
         _ => 0,
     }
 }
 
 fn compare_values(op: &BinaryOp, l: &Value, r: &Value) -> Value {
-    let (li, ri) = (to_i64(l), to_i64(r));
+    let ord = match (as_num(l), as_num(r)) {
+        (Some(a), Some(b)) => a.partial_cmp(&b),
+        _ => match (l, r) {
+            (Value::Text(a), Value::Text(b)) => Some(a.cmp(b)),
+            _ => None,
+        },
+    };
+    let Some(ord) = ord else {
+        return Value::Bool(false);
+    };
+    use std::cmp::Ordering::*;
     let b = match op {
-        BinaryOp::Lt => li < ri,
-        BinaryOp::Le => li <= ri,
-        BinaryOp::Gt => li > ri,
-        BinaryOp::Ge => li >= ri,
+        BinaryOp::Lt => ord == Less,
+        BinaryOp::Le => ord != Greater,
+        BinaryOp::Gt => ord == Greater,
+        BinaryOp::Ge => ord != Less,
         _ => false,
     };
     Value::Bool(b)
 }
 
+/// Combine two numbers: integers stay integers, anything with a decimal becomes decimal.
+fn num_op(
+    l: &Value,
+    r: &Value,
+    int_op: fn(i64, i64) -> Option<i64>,
+    f_op: fn(f64, f64) -> f64,
+) -> Value {
+    match (l, r) {
+        (Value::Int(a), Value::Int(b)) => match int_op(*a, *b) {
+            Some(n) => Value::Int(n),
+            None => Value::Float(f_op(*a as f64, *b as f64)),
+        },
+        (Value::Money(a), Value::Money(b))
+        | (Value::Money(a), Value::Int(b))
+        | (Value::Int(a), Value::Money(b)) => match int_op(*a, *b) {
+            Some(n) => Value::Money(n),
+            None => Value::Float(f_op(*a as f64, *b as f64)),
+        },
+        _ => match (as_num(l), as_num(r)) {
+            (Some(a), Some(b)) => Value::Float(f_op(a, b)),
+            _ => Value::Null,
+        },
+    }
+}
+
 fn add_values(l: &Value, r: &Value) -> Value {
-    Value::Int(to_i64(l) + to_i64(r))
+    match (l, r) {
+        (Value::Text(a), b) => Value::Text(format!("{a}{}", value_to_display(b))),
+        (a, Value::Text(b)) => Value::Text(format!("{}{b}", value_to_display(a))),
+        (Value::List(a), Value::List(b)) => {
+            Value::List(a.iter().chain(b.iter()).cloned().collect())
+        }
+        (Value::List(a), b) => {
+            let mut out = a.clone();
+            out.push(b.clone());
+            Value::List(out)
+        }
+        _ => num_op(l, r, i64::checked_add, |a, b| a + b),
+    }
 }
 
 fn sub_values(l: &Value, r: &Value) -> Value {
-    Value::Int(to_i64(l) - to_i64(r))
+    if let Value::List(a) = l {
+        return Value::List(a.iter().filter(|x| !values_equal(x, r)).cloned().collect());
+    }
+    num_op(l, r, i64::checked_sub, |a, b| a - b)
 }
 
 fn mul_values(l: &Value, r: &Value) -> Value {
-    Value::Int(to_i64(l) * to_i64(r))
+    if let (Value::Text(s), Value::Int(n)) = (l, r) {
+        return Value::Text(s.repeat((*n).max(0) as usize));
+    }
+    num_op(l, r, i64::checked_mul, |a, b| a * b)
 }
 
 fn div_values(l: &Value, r: &Value) -> Value {
-    let b = to_i64(r);
-    if b == 0 {
+    if as_num(r) == Some(0.0) {
         return Value::Null;
     }
-    Value::Int(to_i64(l) / b)
+    // `7 / 2` is 3.5 — whole-number results stay whole (`6 / 2` is 3).
+    num_op(
+        l,
+        r,
+        |a, b| if a % b == 0 { Some(a / b) } else { None },
+        |a, b| a / b,
+    )
 }
 
 fn mod_values(l: &Value, r: &Value) -> Value {
-    let b = to_i64(r);
-    if b == 0 {
+    if as_num(r) == Some(0.0) {
         return Value::Null;
     }
-    Value::Int(to_i64(l) % b)
+    num_op(l, r, i64::checked_rem, |a, b| a % b)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -879,12 +962,9 @@ impl ScriptInterpreter {
                         max_steps,
                     )]);
                 }
-                match exec_script_stmt(
+                exec_script_stmt(
                     stmt, &rt, &mut env, &self.fns, file, source, &mut out, false,
-                )? {
-                    ExecControl::Next => {}
-                    ExecControl::Return(_) => {}
-                }
+                )?;
             }
         }
         Ok(RunOutcome { stdout: out, steps })
@@ -900,6 +980,8 @@ struct ScriptEnv {
 enum ExecControl {
     Next,
     Return(Value),
+    Stop,
+    Skip,
 }
 
 fn exec_script_stmt(
@@ -954,7 +1036,8 @@ fn exec_script_stmt(
             for _ in 0..n.max(0) {
                 match exec_script_block(body, rt, env, fns, file, source, out, in_fn)? {
                     ExecControl::Return(v) => return Ok(ExecControl::Return(v)),
-                    ExecControl::Next => {}
+                    ExecControl::Stop => break,
+                    ExecControl::Next | ExecControl::Skip => {}
                 }
             }
             Ok(ExecControl::Next)
@@ -977,7 +1060,29 @@ fn exec_script_stmt(
                 env.locals.insert(var.clone(), Value::Int(i));
                 match exec_script_block(body, rt, env, fns, file, source, out, in_fn)? {
                     ExecControl::Return(v) => return Ok(ExecControl::Return(v)),
-                    ExecControl::Next => {}
+                    ExecControl::Stop => break,
+                    ExecControl::Next | ExecControl::Skip => {}
+                }
+            }
+            Ok(ExecControl::Next)
+        }
+        ScriptStmt::Stop { .. } => Ok(ExecControl::Stop),
+        ScriptStmt::Skip { .. } => Ok(ExecControl::Skip),
+        ScriptStmt::ForEachList {
+            var, list, body, ..
+        } => {
+            let items = match eval_script_expr(rt, list, env, fns, file, source)? {
+                Value::List(items) => items,
+                Value::Text(t) => t.chars().map(|c| Value::Text(c.to_string())).collect(),
+                Value::Null => Vec::new(),
+                other => vec![other],
+            };
+            for it in items {
+                env.locals.insert(var.clone(), it);
+                match exec_script_block(body, rt, env, fns, file, source, out, in_fn)? {
+                    ExecControl::Return(v) => return Ok(ExecControl::Return(v)),
+                    ExecControl::Stop => break,
+                    ExecControl::Next | ExecControl::Skip => {}
                 }
             }
             Ok(ExecControl::Next)
@@ -1003,7 +1108,8 @@ fn exec_script_stmt(
                 }
                 match exec_script_block(body, rt, env, fns, file, source, out, in_fn)? {
                     ExecControl::Return(v) => return Ok(ExecControl::Return(v)),
-                    ExecControl::Next => {}
+                    ExecControl::Stop => break,
+                    ExecControl::Next | ExecControl::Skip => {}
                 }
             }
             Ok(ExecControl::Next)
@@ -1023,8 +1129,8 @@ fn exec_script_block(
 ) -> Result<ExecControl, Vec<Diagnostic>> {
     for stmt in stmts {
         match exec_script_stmt(stmt, rt, env, fns, file, source, out, in_fn)? {
-            ExecControl::Return(v) => return Ok(ExecControl::Return(v)),
             ExecControl::Next => {}
+            other => return Ok(other),
         }
     }
     Ok(ExecControl::Next)
@@ -1037,6 +1143,9 @@ fn stmt_span_stmt(stmt: &ScriptStmt) -> Span {
         | ScriptStmt::If { span, .. }
         | ScriptStmt::Repeat { span, .. }
         | ScriptStmt::ForEachRange { span, .. }
+        | ScriptStmt::ForEachList { span, .. }
+        | ScriptStmt::Stop { span }
+        | ScriptStmt::Skip { span }
         | ScriptStmt::While { span, .. }
         | ScriptStmt::Give { span, .. } => span.clone(),
     }
@@ -1091,6 +1200,9 @@ fn eval_script_expr(
                 if fns.contains_key(n) && !env.locals.contains_key(n) {
                     return call_script_fn(n, &[], &[], rt, env, fns, file, source, span);
                 }
+                if crate::check::is_script_builtin(n) {
+                    return Ok(call_builtin(n, Vec::new()));
+                }
             }
             Ok(Value::Null)
         }
@@ -1142,7 +1254,11 @@ fn call_script_fn(
     span: &Span,
 ) -> Result<Value, Vec<Diagnostic>> {
     let Some(defn) = fns.get(name) else {
-        return Ok(Value::Null);
+        let mut vals = Vec::with_capacity(args.len());
+        for a in args {
+            vals.push(eval_script_expr(rt, a, env, fns, file, source)?);
+        }
+        return Ok(call_builtin(name, vals));
     };
     if env.call_depth >= SCRIPT_CALL_DEPTH_LIMIT {
         return Err(vec![Diagnostic::error(
@@ -1195,7 +1311,7 @@ fn call_script_fn(
         true,
     )? {
         ExecControl::Return(v) => Ok(v),
-        ExecControl::Next => Err(vec![Diagnostic::error(
+        _ => Err(vec![Diagnostic::error(
             "E113",
             format!("function `{name}` finished without `give`"),
             file,
@@ -1206,15 +1322,24 @@ fn call_script_fn(
     }
 }
 
-fn clone_value(v: &Value) -> Value {
-    match v {
-        Value::Text(s) => Value::Text(s.clone()),
-        Value::Int(n) => Value::Int(*n),
-        Value::Money(m) => Value::Money(*m),
-        Value::Bool(b) => Value::Bool(*b),
-        Value::Enum(s) => Value::Enum(s.clone()),
-        Value::Null => Value::Null,
+/// Print decimals without noise: `3.5`, `0.3` (not `0.30000000000000004`), `2` for `2.0`.
+pub fn format_float(f: f64) -> String {
+    if f.is_nan() {
+        return "not a number".into();
     }
+    if f.is_infinite() {
+        return if f > 0.0 {
+            "infinity".into()
+        } else {
+            "-infinity".into()
+        };
+    }
+    if f.fract() == 0.0 && f.abs() < 1e15 {
+        return format!("{}", f as i64);
+    }
+    let s = format!("{:.10}", f);
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    s.to_string()
 }
 
 pub fn value_to_display(v: &Value) -> String {
@@ -1224,32 +1349,252 @@ pub fn value_to_display(v: &Value) -> String {
         Value::Money(m) => m.to_string(),
         Value::Bool(b) => b.to_string(),
         Value::Enum(s) => s.clone(),
-        Value::Null => "null".into(),
+        Value::Float(f) => format_float(*f),
+        Value::List(items) => items
+            .iter()
+            .map(value_to_display)
+            .collect::<Vec<_>>()
+            .join(", "),
+        Value::Null => "nothing".into(),
     }
 }
 
-fn format_say_value(v: &Value, env: &Env) -> String {
-    let mut text = value_to_display(v);
-    if let Value::Text(s) = v {
-        text = interpolate_say_string(s, env);
+fn as_list(v: Value) -> Vec<Value> {
+    match v {
+        Value::List(items) => items,
+        Value::Null => Vec::new(),
+        other => vec![other],
     }
-    text
 }
 
-fn interpolate_say_string(s: &str, env: &Env) -> String {
-    if let Some(idx) = s.rfind(", ") {
-        let ident = s[idx + 2..].trim();
-        if !ident.is_empty()
-            && ident.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-            && !ident.chars().next().is_some_and(|c| c.is_ascii_digit())
-        {
-            if let Some(v) = env.locals.get(ident) {
-                return format!("{}{}", &s[..idx + 2], value_to_display(v));
+fn sort_values(items: &mut [Value]) {
+    items.sort_by(|a, b| match (as_num(a), as_num(b)) {
+        (Some(x), Some(y)) => x.partial_cmp(&y).unwrap_or(std::cmp::Ordering::Equal),
+        _ => value_to_display(a).cmp(&value_to_display(b)),
+    });
+}
+
+fn float_or_int(f: f64) -> Value {
+    if f.fract() == 0.0 && f.abs() < 9.0e15 {
+        Value::Int(f as i64)
+    } else {
+        Value::Float(f)
+    }
+}
+
+/// Built-in script functions: lists, text, and math.
+pub fn call_builtin(name: &str, mut args: Vec<Value>) -> Value {
+    let first = if args.is_empty() {
+        Value::Null
+    } else {
+        args.remove(0)
+    };
+    let second = if args.is_empty() {
+        Value::Null
+    } else {
+        args.remove(0)
+    };
+    match name {
+        "list" => {
+            let mut out = Vec::new();
+            if !matches!(first, Value::Null) {
+                out.push(first);
             }
-            if let Some(v) = env.field(ident, ident) {
-                return format!("{}{}", &s[..idx + 2], value_to_display(&v));
+            if !matches!(second, Value::Null) {
+                out.push(second);
+            }
+            out.extend(args);
+            Value::List(out)
+        }
+        "range" => {
+            let (a, b) = (to_i64(&first), to_i64(&second));
+            Value::List((a.min(b)..=a.max(b)).map(Value::Int).collect())
+        }
+        "__append" => {
+            let mut l = as_list(first);
+            l.push(second);
+            Value::List(l)
+        }
+        "__remove" => {
+            let l = as_list(first);
+            Value::List(
+                l.into_iter()
+                    .filter(|x| !values_equal(x, &second))
+                    .collect(),
+            )
+        }
+        "count" | "size" | "length" => match first {
+            Value::List(l) => Value::Int(l.len() as i64),
+            Value::Text(t) => Value::Int(t.chars().count() as i64),
+            Value::Null => Value::Int(0),
+            _ => Value::Int(1),
+        },
+        "first" => match first {
+            Value::List(l) => l.into_iter().next().unwrap_or(Value::Null),
+            Value::Text(t) => t
+                .chars()
+                .next()
+                .map(|c| Value::Text(c.into()))
+                .unwrap_or(Value::Null),
+            other => other,
+        },
+        "last" => match first {
+            Value::List(l) => l.into_iter().last().unwrap_or(Value::Null),
+            Value::Text(t) => t
+                .chars()
+                .last()
+                .map(|c| Value::Text(c.into()))
+                .unwrap_or(Value::Null),
+            other => other,
+        },
+        "item" => {
+            let idx = to_i64(&first);
+            let l = match second {
+                Value::Text(t) => t.chars().map(|c| Value::Text(c.into())).collect(),
+                other => as_list(other),
+            };
+            if idx >= 1 && (idx as usize) <= l.len() {
+                l[idx as usize - 1].clone()
+            } else {
+                Value::Null
             }
         }
+        "sum" => {
+            let total = as_list(first).iter().filter_map(as_num).sum::<f64>();
+            float_or_int(total)
+        }
+        "average" => {
+            let l = as_list(first);
+            let nums: Vec<f64> = l.iter().filter_map(as_num).collect();
+            if nums.is_empty() {
+                Value::Null
+            } else {
+                float_or_int(nums.iter().sum::<f64>() / nums.len() as f64)
+            }
+        }
+        "min" | "max" => {
+            let mut l = if matches!(second, Value::Null) {
+                as_list(first)
+            } else {
+                vec![first, second]
+            };
+            sort_values(&mut l);
+            if name == "min" {
+                l.into_iter().next().unwrap_or(Value::Null)
+            } else {
+                l.into_iter().last().unwrap_or(Value::Null)
+            }
+        }
+        "sort" | "sorted" => {
+            let mut l = as_list(first);
+            sort_values(&mut l);
+            Value::List(l)
+        }
+        "reverse" | "reversed" => match first {
+            Value::Text(t) => Value::Text(t.chars().rev().collect()),
+            other => {
+                let mut l = as_list(other);
+                l.reverse();
+                Value::List(l)
+            }
+        },
+        "unique" => {
+            let mut out: Vec<Value> = Vec::new();
+            for v in as_list(first) {
+                if !out.iter().any(|o| values_equal(o, &v)) {
+                    out.push(v);
+                }
+            }
+            Value::List(out)
+        }
+        "join" => {
+            let sep = match second {
+                Value::Null => ", ".to_string(),
+                other => value_to_display(&other),
+            };
+            Value::Text(
+                as_list(first)
+                    .iter()
+                    .map(value_to_display)
+                    .collect::<Vec<_>>()
+                    .join(&sep),
+            )
+        }
+        "split" => {
+            let text = value_to_display(&first);
+            let sep = match second {
+                Value::Null => " ".to_string(),
+                other => value_to_display(&other),
+            };
+            Value::List(
+                text.split(sep.as_str())
+                    .filter(|p| !p.is_empty())
+                    .map(|p| Value::Text(p.to_string()))
+                    .collect(),
+            )
+        }
+        "upper" => Value::Text(value_to_display(&first).to_uppercase()),
+        "lower" => Value::Text(value_to_display(&first).to_lowercase()),
+        "trim" => Value::Text(value_to_display(&first).trim().to_string()),
+        "text" => Value::Text(value_to_display(&first)),
+        "number" => {
+            let t = value_to_display(&first);
+            let t = t.trim();
+            if let Ok(n) = t.parse::<i64>() {
+                Value::Int(n)
+            } else if let Ok(f) = t.parse::<f64>() {
+                Value::Float(f)
+            } else {
+                Value::Null
+            }
+        }
+        "round" => {
+            let Some(x) = as_num(&first) else {
+                return Value::Null;
+            };
+            match as_num(&second) {
+                Some(places) if places > 0.0 => {
+                    let m = 10f64.powi(places as i32);
+                    float_or_int((x * m).round() / m)
+                }
+                _ => Value::Int(x.round() as i64),
+            }
+        }
+        "floor" => as_num(&first)
+            .map(|x| Value::Int(x.floor() as i64))
+            .unwrap_or(Value::Null),
+        "ceil" => as_num(&first)
+            .map(|x| Value::Int(x.ceil() as i64))
+            .unwrap_or(Value::Null),
+        "abs" => match first {
+            Value::Int(n) => Value::Int(n.abs()),
+            other => as_num(&other)
+                .map(|x| Value::Float(x.abs()))
+                .unwrap_or(Value::Null),
+        },
+        "sqrt" => as_num(&first)
+            .map(|x| float_or_int(x.sqrt()))
+            .unwrap_or(Value::Null),
+        "random" => {
+            // Deterministic-per-run pseudo random in [first, second] (defaults 1..100).
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let lo = if matches!(first, Value::Null) {
+                1
+            } else {
+                to_i64(&first)
+            };
+            let hi = if matches!(second, Value::Null) {
+                100
+            } else {
+                to_i64(&second)
+            };
+            let nanos = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.subsec_nanos() as i64)
+                .unwrap_or(7);
+            let span = (hi - lo).abs() + 1;
+            Value::Int(lo.min(hi) + nanos.rem_euclid(span))
+        }
+        _ => Value::Null,
     }
-    s.to_string()
 }

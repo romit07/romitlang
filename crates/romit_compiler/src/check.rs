@@ -309,7 +309,30 @@ fn check_script_stmt(
             let mut loop_scope = scope.clone();
             check_script_block(body, &mut loop_scope, fns, file, source, diags, in_fn);
         }
+        ScriptStmt::ForEachList {
+            var, list, body, ..
+        } => {
+            check_script_expr(list, scope, fns, file, source, diags);
+            let mut loop_scope = scope.clone();
+            if !loop_scope.contains(var) {
+                loop_scope.push(var.clone());
+            }
+            check_script_block(body, &mut loop_scope, fns, file, source, diags, in_fn);
+        }
+        ScriptStmt::Stop { .. } | ScriptStmt::Skip { .. } => {}
     }
+}
+
+/// Functions every script can call without defining them.
+pub const SCRIPT_BUILTINS: &[&str] = &[
+    "list", "count", "size", "length", "first", "last", "item", "sum", "min", "max", "average",
+    "sort", "sorted", "reverse", "reversed", "join", "split", "upper", "lower", "trim", "round",
+    "floor", "ceil", "abs", "sqrt", "number", "text", "random", "range", "unique", "__append",
+    "__remove",
+];
+
+pub fn is_script_builtin(name: &str) -> bool {
+    SCRIPT_BUILTINS.contains(&name)
 }
 
 enum BlockFlow {
@@ -383,6 +406,9 @@ fn stmt_span(stmt: &ScriptStmt) -> Span {
         | ScriptStmt::If { span, .. }
         | ScriptStmt::Repeat { span, .. }
         | ScriptStmt::ForEachRange { span, .. }
+        | ScriptStmt::ForEachList { span, .. }
+        | ScriptStmt::Stop { span }
+        | ScriptStmt::Skip { span }
         | ScriptStmt::While { span, .. }
         | ScriptStmt::Give { span, .. } => span.clone(),
     }
@@ -417,7 +443,7 @@ fn check_script_expr(
             if fns.contains_key(name) {
                 return;
             }
-            if !scope.iter().any(|v| v == name) {
+            if !scope.iter().any(|v| v == name) && !is_script_builtin(name) {
                 let mut candidates: Vec<String> = scope.to_vec();
                 candidates.extend(fns.keys().cloned());
                 let mut msg = format!("undefined name `{name}`");
@@ -454,8 +480,20 @@ fn check_script_expr(
             named,
             span,
         } => {
+            if !fns.contains_key(name) && is_script_builtin(name) {
+                for a in args {
+                    check_script_expr(a, scope, fns, file, source, diags);
+                }
+                return;
+            }
             let Some(defn) = fns.get(name) else {
                 let mut candidates: Vec<String> = fns.keys().cloned().collect();
+                candidates.extend(
+                    SCRIPT_BUILTINS
+                        .iter()
+                        .filter(|b| !b.starts_with('_'))
+                        .map(|b| b.to_string()),
+                );
                 let mut msg = format!("undefined function `{name}`");
                 if let Some(hint) = did_you_mean(name, &candidates) {
                     msg.push_str(&format!("; did you mean `{hint}`?"));

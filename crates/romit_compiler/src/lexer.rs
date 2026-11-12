@@ -24,6 +24,8 @@ pub enum TokenKind {
     Percent,
     Dot,
     Assign,
+    PlusAssign,
+    MinusAssign,
     Comma,
     Colon,
 }
@@ -56,6 +58,22 @@ impl Lexer {
             indent_stack: vec![0],
             pending_dedents: 0,
         }
+    }
+
+    /// `# comment` — a hash followed by a space, another hash, or end of line.
+    /// `#fff` stays a color literal.
+    fn at_comment_start(&self) -> bool {
+        self.peek() == Some('#')
+            && matches!(
+                self.chars.get(self.pos + 1),
+                None | Some(' ') | Some('#') | Some('\n') | Some('!')
+            )
+    }
+
+    /// `note anything` at the start of a line is a comment (same as Romit UI files).
+    fn at_note_line(&self) -> bool {
+        let rest: String = self.chars[self.pos..].iter().take(5).collect();
+        rest == "note " || rest == "note\n" || (rest == "note" && self.pos + 4 == self.chars.len())
     }
 
     fn ensure_chars(&mut self) {
@@ -114,7 +132,12 @@ impl Lexer {
                     ));
                 }
                 let top = *self.indent_stack.last().unwrap_or(&0);
-                if matches!(self.peek(), Some('#') | Some('\n') | None) {
+                if self.at_comment_start() || self.at_note_line() {
+                    while matches!(self.peek(), Some(ch) if ch != '\n') {
+                        self.bump();
+                    }
+                }
+                if matches!(self.peek(), Some('\n') | None) {
                     // blank or comment-only line
                 } else if indent > top {
                     self.indent_stack.push(indent);
@@ -218,7 +241,7 @@ impl Lexer {
                 continue;
             }
 
-            if c == '/' && self.chars.get(self.pos + 1) == Some(&'/') {
+            if (c == '/' && self.chars.get(self.pos + 1) == Some(&'/')) || self.at_comment_start() {
                 while matches!(self.peek(), Some(ch) if ch != '\n') {
                     self.bump();
                 }
@@ -282,12 +305,23 @@ impl Lexer {
             if c.is_ascii_digit() {
                 let mut num = String::new();
                 let mut is_dec = false;
-                while matches!(self.peek(), Some(ch) if ch.is_ascii_digit() || ch == '.') {
-                    let ch = self.bump().unwrap();
-                    if ch == '.' {
+                while let Some(ch) = self.peek() {
+                    let next_is_digit = self
+                        .chars
+                        .get(self.pos + 1)
+                        .is_some_and(|d| d.is_ascii_digit());
+                    if ch.is_ascii_digit() || (ch == '_' && next_is_digit) {
+                        self.bump();
+                        if ch != '_' {
+                            num.push(ch);
+                        }
+                    } else if ch == '.' && !is_dec && next_is_digit {
+                        self.bump();
                         is_dec = true;
+                        num.push(ch);
+                    } else {
+                        break;
                     }
-                    num.push(ch);
                 }
                 tokens.push(Token {
                     kind: if is_dec {
@@ -364,11 +398,21 @@ impl Lexer {
                 }
                 '+' => {
                     self.bump();
-                    TokenKind::Plus
+                    if self.peek() == Some('=') {
+                        self.bump();
+                        TokenKind::PlusAssign
+                    } else {
+                        TokenKind::Plus
+                    }
                 }
                 '-' => {
                     self.bump();
-                    TokenKind::Minus
+                    if self.peek() == Some('=') {
+                        self.bump();
+                        TokenKind::MinusAssign
+                    } else {
+                        TokenKind::Minus
+                    }
                 }
                 '*' => {
                     self.bump();

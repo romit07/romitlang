@@ -1,26 +1,10 @@
-note PLANNED — Romit UI framework (Stage 4). Not parsed by the Stage 1 compiler.
-note Minimal counter: theme lives on the app; the "+" button has no extra styling.
-
-app CounterDemo
-  home Counter
-  theme default
-    accent #2563eb
-    button
-      background accent
-      text white
-      radius 8
-  defaults
-    padding 24
-    align center
-
-  screen Counter at /
-    state
-      count int is 0
-    column
-      gap 16
-      text count
-        size 48
-      button "+"
-        on click increment
-    on click increment
-      set count to count plus 1
+note SHIPPED — this sketch is now real. See examples/apps/counter.rmt:
+note
+note   use ui
+note   app Counter
+note     state
+note       count is 0
+note     screen Home
+note       column center gap 16
+note         text "{count}" size 48
+note         button "+" do count += 1

@@ -1,4 +1,4 @@
-use crate::{build_ui, default_out_dir, format_diagnostics};
+use crate::{build, default_out_dir, format_diagnostics};
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -7,7 +7,7 @@ use std::thread;
 use std::time::Duration;
 
 pub fn serve_preview(source_path: &Path, port: u16) -> Result<(), String> {
-    let source = fs::read_to_string(source_path)
+    fs::read_to_string(source_path)
         .map_err(|e| format!("cannot read {}: {e}", source_path.display()))?;
     let file = source_path.to_string_lossy().to_string();
     let out_dir = default_out_dir(source_path);
@@ -19,16 +19,23 @@ pub fn serve_preview(source_path: &Path, port: u16) -> Result<(), String> {
 
     for stream in listener.incoming() {
         let Ok(mut stream) = stream else { continue };
-        let source_path = source_path.to_path_buf();
-        let source = source.clone();
-        let file = file.clone();
-        let out_dir = out_dir.clone();
-        if let Err(diags) = build_ui(&source, &file, &out_dir) {
-            let body = format!("<pre>{}</pre>", html_escape(&format_diagnostics(&diags)));
+        // Re-read the file on every request so edits show up on refresh.
+        let source = match fs::read_to_string(source_path) {
+            Ok(s) => s,
+            Err(e) => {
+                let body = format!("<pre>cannot read {}: {e}</pre>", html_escape(&file));
+                let _ = write_http(&mut stream, 500, "text/html", body.as_bytes());
+                continue;
+            }
+        };
+        if let Err(diags) = build(&source, &file, &out_dir) {
+            let body = format!(
+                "<!DOCTYPE html><meta charset=utf-8><title>Romit error</title><body style=\"font:15px ui-monospace,monospace;padding:24px;background:#1c1c1e;color:#ffd7d5\"><pre>{}</pre>",
+                html_escape(&format_diagnostics(&diags))
+            );
             let _ = write_http(&mut stream, 500, "text/html", body.as_bytes());
             continue;
         }
-        let _ = source_path;
         if let Err(e) = handle_request(&mut stream, &out_dir) {
             eprintln!("request error: {e}");
         }
@@ -47,7 +54,9 @@ fn handle_request(stream: &mut TcpStream, out_dir: &Path) -> std::io::Result<()>
         .unwrap_or("/");
 
     let (status, file_path, content_type) = match path {
-        "/" | "/index.html" => (200, out_dir.join("index.html"), "text/html"),
+        p if p == "/" || p == "/index.html" || p.starts_with("/?") => {
+            (200, out_dir.join("index.html"), "text/html")
+        }
         "/style.css" => (200, out_dir.join("style.css"), "text/css"),
         _ => {
             let body = b"Not Found";

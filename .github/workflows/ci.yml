@@ -23,6 +23,9 @@ jobs:
           ./target/release/romit build examples/ui/landing.rmt
           test -f examples/ui/dist/index.html
           test -f examples/ui/dist/style.css
+          for f in examples/apps/*.rmt; do ./target/release/romit check "$f"; done
+          ./target/release/romit build examples/apps/todos.rmt --out /tmp/romit-app
+          grep -q "R.start()" /tmp/romit-app/index.html
           for f in examples/beginner/*.rmt; do
             case "$f" in
               */hello.rmt) continue ;;

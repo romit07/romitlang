@@ -1,10 +1,10 @@
 # Planned UI syntax
 
-See the full design draft: **[UI framework](../ui-framework.md)** (planned, not implemented).
+Most of these sketches are now real: see **[Building apps](../ui-apps.md)** and `examples/apps/`. The rest describe directions that are still open (screen-level `defaults`, per-state button styles).
 
 | File | What it shows |
 |------|----------------|
-| `counter_ui.rmt` | Minimal counter; plain `"+"` button uses **app theme** |
+| `counter_ui.rmt` | Shipped; points to `examples/apps/counter.rmt` |
 | `theme_cascade.rmt` | **App** `theme`, **defaults**, two screens (one overrides **screen defaults**) |
 | `landing-dark.rmt` | Marketing layout and navigation phrases |
 

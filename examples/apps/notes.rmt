@@ -1,0 +1,67 @@
+use ui
+
+note Notes: search, sorting, menus, a sheet for new notes, and data saved on the device.
+
+app Notes
+  theme
+    accent orange
+
+  state
+    notes is list saved
+    query is ""
+    newTitle is ""
+    newBody is ""
+    sortBy is "Newest"
+
+  computed
+    found is notes where title contains query or body contains query
+    shown is if sortBy is "Newest" then found sorted by created descending else found sorted by title
+
+  action save
+    add to notes with title newTitle, body newBody, created now, pinned false
+    newTitle = ""
+    newBody = ""
+    close
+    toast "Saved"
+
+  screen Library "Notes"
+    toolbar
+      menu "Sort" icon "list.bullet"
+        button "Newest first" do sortBy = "Newest"
+        button "A to Z" do sortBy = "Title"
+      button "New" icon "square.and.pencil" do show Compose
+    search "Search notes" bind query
+    if notes is empty
+      empty "No notes yet" icon "doc.text" message "Tap New to write your first note."
+        button "Write a note" do show Compose
+          style prominent
+    otherwise if shown is empty
+      empty "No results" icon "magnifyingglass" message "Nothing matches “{query}”."
+    otherwise
+      list
+        for each n in shown
+          link to Read with n
+            column gap 2
+              subheading n.title
+              caption "{n.created as ago} · {n.body}"
+                lines 1
+            on delete
+              ask "Delete this note?"
+                remove n from notes
+
+  screen Read with n titled n.title
+    caption n.created as datetime
+    text n.body selectable
+    row
+      button "Copy" icon "doc" do copy n.body
+      share n.body "Share"
+
+  screen Compose "New note"
+    form
+      field "Title" bind newTitle
+        focused
+      editor "Write something…" bind newBody
+    button "Save" do save
+      style prominent
+      stretch
+      disabled if newTitle is empty
