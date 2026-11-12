@@ -51,6 +51,10 @@ npm run package   # writes romit-<version>.vsix
 npm run build-grammar && npm test
 ```
 
+## Publishing
+
+GitHub releases automatically publish this extension to the [VS Code Marketplace](https://marketplace.visualstudio.com/) and [Open VSX](https://open-vsx.org/) when the repository secrets `VSCE_PAT` and `OVSX_PAT` are set. To publish a past release manually, open **Actions** → **Publish VS Code extension** → **Run workflow** and enter the release tag (for example, `v0.1.0`).
+
 ## Links
 
 - [Language guide](https://romitlang.org/)
