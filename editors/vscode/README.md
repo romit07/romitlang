@@ -32,7 +32,7 @@ It also works in Cursor, Windsurf, VSCodium, and other VS Code-based editors.
 From a release: download `romit-<version>.vsix` from [GitHub Releases](https://github.com/romit07/romitlang/releases), then:
 
 ```bash
-code --install-extension romit-0.1.0.vsix
+code --install-extension romit-0.2.0.vsix
 ```
 
 Or in VS Code: **Extensions** → **⋯** → **Install from VSIX…**.

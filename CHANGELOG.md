@@ -2,7 +2,31 @@
 
 All notable changes to Romit. Versions follow [semantic versioning](https://semver.org/). While Romit is 0.x, a new middle number means new features.
 
-## Unreleased
+## v0.2.0: Records, match, and errors
+
+Everyday programming, inspired by a feature-by-feature pass through Kotlin's documentation: records and maps, `match`, error handling, list transforms, input, multiple files, and errors as you type in VS Code. See [Kotlin → Romit](https://romitlang.org/reference/kotlin-map.html).
+
+```text
+people = list with name "Ada", age 36, with name "Alan", age 41
+say "Over 40: {join people where age is above 40 each name, ", "}"
+
+size = ask "Favourite size?"
+match size
+  "S", "M"
+    say "In stock"
+  otherwise
+    say "We'll order it"
+
+fn withdraw balance, amount
+  if amount is above balance
+    fail "not enough money"
+  give balance minus amount
+
+try
+  say withdraw 10, 50
+if it fails
+  say "Sorry: {error}"
+```
 
 ### Language (from the Kotlin comparison)
 
