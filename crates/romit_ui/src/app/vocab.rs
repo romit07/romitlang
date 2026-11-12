@@ -268,6 +268,7 @@ pub const THEME_KEYS: &[&str] = &[
     "warning",
     "titlefont",
     "width",
+    "look",
 ];
 
 /// Reasons a word can't name a state value or parameter.

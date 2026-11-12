@@ -28,6 +28,8 @@ const editor = document.getElementById("editor");
 const lineNums = document.getElementById("line-nums");
 const output = document.getElementById("output");
 const preview = document.getElementById("preview");
+const lookSel = document.getElementById("look");
+let lastPreview = null;
 const statusEl = document.getElementById("status");
 const examplesSel = document.getElementById("examples");
 
@@ -63,13 +65,27 @@ async function initWasm() {
   return { run_program, check_program, test_program, is_ui_program, build_ui_program };
 }
 
+// Force the preview's look (auto = whatever device you are on).
+function withLook(html) {
+  const look = lookSel ? lookSel.value : "auto";
+  if (look === "auto") return html;
+  return html.replace("<script>", `<script>window.ROMIT_LOOK = ${JSON.stringify(look)};</script>\n<script>`);
+}
+
+if (lookSel) {
+  lookSel.addEventListener("change", () => {
+    if (lastPreview && !preview.hidden) preview.srcdoc = withLook(lastPreview);
+  });
+}
+
 function showPreview(json) {
   const data = JSON.parse(json);
   if (data.ok) {
     output.classList.remove("error");
     output.textContent = "Live preview below — click around, it's a real app.";
     preview.hidden = false;
-    preview.srcdoc = data.html;
+    lastPreview = data.html;
+    preview.srcdoc = withLook(data.html);
   } else {
     preview.hidden = true;
     output.classList.add("error");

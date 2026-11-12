@@ -221,3 +221,33 @@ fn search_suggestions_and_scopes() {
     assert!(js.contains("\"scopes\": R.opts([\"All\", \"Mine\"])"));
     assert!(js.contains("\"scope\": {get: () => S.sc"));
 }
+
+#[test]
+fn look_setting() {
+    for (look, want) in [
+        ("material", "\"material\""),
+        ("apple", "\"apple\""),
+        ("auto", "\"auto\""),
+    ] {
+        let js = ok(&format!(
+            "use ui\ntheme\n  look {look}\nscreen Home\n  text \"x\"\n"
+        ));
+        assert!(
+            js.contains(&format!("R.lookSetting = () => {want};")),
+            "{look}"
+        );
+    }
+    err(
+        "use ui\ntheme\n  look windows95\nscreen Home\n  text \"x\"\n",
+        "U006",
+    );
+}
+
+#[test]
+fn runtime_adapts_to_device() {
+    let html =
+        romit_ui::app::build_app_html("use ui\nscreen Home\n  text \"x\"\n", "t.rmt").unwrap();
+    // Apple devices get the Apple look; everything else (Android, Windows, Linux) gets Material 3
+    assert!(html.contains("function resolveLook()"));
+    assert!(html.contains("data-look=\"material\""));
+}

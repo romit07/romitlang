@@ -713,8 +713,12 @@ function screenView(entry, mode) {
   return h("div", { class: "r-screen" + (presented ? " r-screen-sheet" : "") + (inline ? " r-inline" : " r-root"), key: entry.name + ":" + mode + ":" + st.length },
     h("header", { class: "r-navbar" },
       h("div", { class: "r-navbar-lead" },
-        canBack ? h("button", { type: "button", class: "r-back", onClick: () => R.back() }, "‹ ", R.show(R.screens[st[st.length - 2].name].title(...st[st.length - 2].args))) : null,
-        presented && !lock ? h("button", { type: "button", class: "r-back", onClick: () => R.close() }, "Close") : null,
+        canBack ? (R.look === "material"
+          ? h("button", { type: "button", class: "r-back r-back-icon", "aria-label": "Back", title: "Back", onClick: () => R.back() }, "←")
+          : h("button", { type: "button", class: "r-back", onClick: () => R.back() }, "‹ ", R.show(R.screens[st[st.length - 2].name].title(...st[st.length - 2].args)))) : null,
+        presented && !lock ? (R.look === "material"
+          ? h("button", { type: "button", class: "r-back r-back-icon", "aria-label": "Close", title: "Close", onClick: () => R.close() }, "✕")
+          : h("button", { type: "button", class: "r-back", onClick: () => R.close() }, "Close")) : null,
         isRoot ? documentMenu() : null,
         place("leading")),
       h("div", { class: "r-navbar-title" }, place("title").length ? place("title") : [h("span", {}, title), subtitle ? h("span", { class: "r-navbar-subtitle" }, subtitle) : null]),
@@ -755,6 +759,8 @@ function draw() {
   try {
     const root = document.getElementById("romit-app");
     const mode = R.show(R.appearance());
+    R.look = resolveLook();
+    document.documentElement.dataset.look = R.look;
     document.documentElement.dataset.theme = mode === "dark" ? "dark" : mode === "light" ? "light" : "";
     const ts = tabs();
     const st = stack();
@@ -819,6 +825,21 @@ function applyTheme() {
     else if (k === "font") r.setProperty("--font", `${JSON.stringify(R.show(t[k]))}, system-ui, sans-serif`);
     else if (k === "titlefont") r.setProperty("--title-font", `${JSON.stringify(R.show(t[k]))}, var(--font)`);
   }
+}
+/* ---------- look: Apple on Apple devices, Material 3 elsewhere ---------- */
+R.lookSetting = () => "auto";
+function resolveLook() {
+  let forced = null;
+  try { forced = new URLSearchParams(location.search).get("look"); } catch (e) { /* no URL */ }
+  let look = String(forced || window.ROMIT_LOOK || R.show(R.lookSetting()) || "auto").toLowerCase();
+  if (look === "auto") {
+    const ua = navigator.userAgent || "";
+    const apple = /iPhone|iPad|iPod|Macintosh|Mac OS X/.test(ua) && !/Android/.test(ua);
+    look = apple ? "apple" : "material";
+  }
+  if (look === "ios" || look === "cupertino") look = "apple";
+  if (look === "android" || look === "google") look = "material";
+  return look === "material" ? "material" : "apple";
 }
 R.start = () => {
   R.init();

@@ -891,6 +891,32 @@ impl<'a, 'b> Gen<'a, 'b> {
                     let _ = writeln!(out, "R.appearance = () => {v};");
                     continue;
                 }
+                "look" => {
+                    // auto (default) | apple | material
+                    let v = self.word(&t.value);
+                    if let Expr::Name(n) = &t.value {
+                        if !matches!(
+                            n.as_str(),
+                            "auto"
+                                | "apple"
+                                | "ios"
+                                | "cupertino"
+                                | "material"
+                                | "android"
+                                | "google"
+                        ) && !self.is_value_name(n)
+                        {
+                            self.err(
+                                "U006",
+                                format!("unknown look `{n}`"),
+                                t.line,
+                                Some("looks: auto (match the device), apple, material".into()),
+                            );
+                        }
+                    }
+                    let _ = writeln!(out, "R.lookSetting = () => {v};");
+                    continue;
+                }
                 "corner" | "spacing" | "width" => self.expr(&t.value),
                 "font" | "titlefont" => self.word(&t.value),
                 _ => self.color(&t.value),

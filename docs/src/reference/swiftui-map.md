@@ -4,6 +4,8 @@ This map walks through [Apple's SwiftUI documentation](https://developer.apple.c
 
 **Status:** ✅ shipped · 🟡 partial · ⏳ planned
 
+Unlike SwiftUI, Romit apps aren't Apple-only. The same file renders with an Apple look on iPhone, iPad and Mac and with Google's Material 3 on Android, Windows and Linux (`theme` → `look auto | apple | material`).
+
 ## Side by side
 
 ```swift

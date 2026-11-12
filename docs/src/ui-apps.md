@@ -1,6 +1,6 @@
 # Building apps
 
-Romit apps are **reactive UIs in the SwiftUI style**: you describe what the screen shows for the current data, and Romit redraws it whenever the data changes. One `.rmt` file compiles to one self-contained `index.html` that runs in any browser, with no build tools, frameworks, or `node_modules`.
+Romit apps are **reactive UIs in the SwiftUI style** that look native on both iPhone and Android: you describe what the screen shows for the current data, and Romit redraws it whenever the data changes. One `.rmt` file compiles to one self-contained `index.html` that runs in any browser, with no build tools, frameworks, or `node_modules`.
 
 ```text
 use ui
@@ -168,7 +168,7 @@ Modifiers go after the content or on indented lines. Add `if <condition>` (or `u
 | `opacity 0.5`, `blur 4`, `rotate 45`, `scale 1.2`, `offset 10 -4`, `z 2` | the same names |
 | `center`, `leading`, `trailing`, `align top` | alignment |
 | `hidden`, `disabled` | `.hidden()`, `.disabled` |
-| `style prominent / bordered / plain / glass / capsule / large`, `role destructive` | `.buttonStyle`, `role:` |
+| `style prominent / bordered / plain / glass / capsule / large / fab`, `role destructive` | `.buttonStyle`, `role:` |
 | `style checkbox` (toggles), `style segmented / menu` (pickers) | `.toggleStyle`, `.pickerStyle` |
 | `badge 3`, `help "tooltip"`, `describe "label"`, `selectable`, `focused` | `.badge`, `.help`, `.accessibilityLabel`, `.textSelection`, `@FocusState` |
 | `transition slide`, `animated` | `.transition`, `.animation` |
@@ -346,6 +346,24 @@ screen Home
 | `random 1 to 6`, `now`, `today` | built-ins |
 | `with title "x", done false` | a record |
 
+## Looks native on iPhone and Android
+
+The same `.rmt` file looks at home on every device. You don't change your code:
+
+| Device | Look |
+|--------|------|
+| iPhone, iPad, Mac | **Apple**: large titles, `‹ Back` buttons, inset grouped lists, iOS switches and segmented controls, centered alerts |
+| Android, Windows, Linux, Chromebook | **Material 3** (Material You): top app bar with a ← arrow, navigation bar with pill indicators, pill buttons, Material switches, outlined text fields, segmented buttons with ✓, bottom sheets, snackbars, Material dialogs |
+
+To pick one look for every device:
+
+```text
+theme
+  look material        # or: apple, auto (the default)
+```
+
+To preview the other look, add `?look=material` or `?look=apple` to the app's address, or use the **Look** menu in the playground. `style fab` turns a button into a floating action button (round on Apple, rounded-square on Material).
+
 ## Theme
 
 ```text
@@ -356,7 +374,7 @@ theme
   dark when darkMode       # or: appearance dark / light / auto
 ```
 
-Settings: `accent background surface text muted separator danger success warning corner spacing font titlefont width appearance dark`.
+Settings: `look accent background surface text muted separator danger success warning corner spacing font titlefont width appearance dark`.
 
 ## Errors
 
