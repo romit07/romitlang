@@ -12,8 +12,10 @@ const R = {
 /* ---------- values ---------- */
 R.list = (v) => Array.isArray(v) ? v : (v === null || v === undefined || v === "") ? [] : [v];
 R.num = (v) => { if (typeof v === "number") return v; if (typeof v === "boolean") return v ? 1 : 0; const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+R.orElse = (a, b) => (a === null || a === undefined || a === "" || (typeof a === "number" && isNaN(a))) ? b : a;
 R.truthy = (v) => Array.isArray(v) ? v.length > 0 : !!v;
 R.isEmpty = (v) => v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0) || (typeof v === "object" && !Array.isArray(v) && !(v instanceof Date) && Object.keys(v).length === 0);
+R.pick = (it, f, outer) => (it && typeof it === "object" && !Array.isArray(it) && Object.prototype.hasOwnProperty.call(it, f)) ? it[f] : outer();
 R.field = (o, f) => (o === null || o === undefined) ? undefined : o[f];
 R.copy = (v) => (v && typeof v === "object" && !(v instanceof Date)) ? JSON.parse(JSON.stringify(v)) : v;
 R.same = (a, b) => (a && typeof a === "object") ? a === b || JSON.stringify(a) === JSON.stringify(b) : R.eq(a, b);
@@ -52,16 +54,21 @@ R.sort = (l, field, desc) => {
   const out = R.list(l).slice().sort((a, b) => field ? R.cmp(R.field(a, field), R.field(b, field)) : R.cmp(a, b));
   return desc ? out.reverse() : out;
 };
+R.group = (l, f) => { const out = {}; for (const x of R.list(l)) { const k = R.show(R.field(x, f)); (out[k] = out[k] || []).push(x); } return out; };
+R.take = (n, l, fromEnd) => { const k = Math.max(0, R.num(n)); if (typeof l === "string") return fromEnd ? (k ? l.slice(-k) : "") : l.slice(0, k); const a = R.list(l); return fromEnd ? (k ? a.slice(-k) : []) : a.slice(0, k); };
+R.slice = (a, b, l) => { const lo = Math.max(1, R.num(a)) - 1, hi = Math.max(0, R.num(b)); return typeof l === "string" ? [...l].slice(lo, hi).join("") : R.list(l).slice(lo, hi); };
 R.shuffle = (l) => { const a = R.list(l).slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 R.rand = (a, b) => { const lo = Math.ceil(Math.min(R.num(a), R.num(b))), hi = Math.floor(Math.max(R.num(a), R.num(b))); return lo + Math.floor(Math.random() * (hi - lo + 1)); };
-R.item = (i, l) => { const arr = typeof l === "string" ? [...l] : R.list(l); return arr[R.num(i) - 1] ?? null; };
+R.item = (i, l) => { if (l && typeof l === "object" && !Array.isArray(l) && !(l instanceof Date)) return l[R.show(i)] ?? null; const arr = typeof l === "string" ? [...l] : R.list(l); return arr[R.num(i) - 1] ?? null; };
+R.date = (v) => v instanceof Date ? v : (typeof v === "string" && /^\d{4}-\d\d-\d\d$/.test(v)) ? new Date(v + "T00:00") : new Date(v);
+R.daysBetween = (a, b) => { const x = new Date(R.date(a)), y = new Date(R.date(b)); x.setHours(0, 0, 0, 0); y.setHours(0, 0, 0, 0); return Math.round((y - x) / 86400000); };
 R.today = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
 R.blank = (v) => Array.isArray(v) ? [] : typeof v === "number" ? 0 : typeof v === "boolean" ? false : (v && typeof v === "object") ? {} : "";
 R.of = (f, v) => {
   const l = () => typeof v === "string" && f !== "count" && f !== "length" && f !== "size" ? [...v] : R.list(v);
   const nums = () => R.list(v).map(R.num);
   switch (f) {
-    case "__range": { const a = R.num(v[0]), b = R.num(v[1]); const out = []; if (a <= b) for (let i = a; i <= b; i++) out.push(i); else for (let i = a; i >= b; i--) out.push(i); return out; }
+    case "__range": { const a = R.num(v[0]), b = R.num(v[1]), st = Math.max(1, Math.abs(R.num(v[2] ?? 1)) || 1); const out = []; if (a <= b) for (let i = a; i <= b; i += st) out.push(i); else for (let i = a; i >= b; i -= st) out.push(i); return out; }
     case "count": case "size": case "length": return typeof v === "string" ? [...v].length : (v && typeof v === "object" && !Array.isArray(v)) ? Object.keys(v).length : R.list(v).length;
     case "sum": case "total": return R.round(nums().reduce((a, b) => a + b, 0));
     case "average": { const n = nums(); return n.length ? R.round(n.reduce((a, b) => a + b, 0) / n.length) : 0; }
@@ -86,6 +93,12 @@ R.of = (f, v) => {
     case "words": return R.show(v).split(/\s+/).filter(Boolean);
     case "lines": return R.show(v).split(/\n/);
     case "keys": return v && typeof v === "object" ? Object.keys(v) : [];
+    case "join": return R.list(v).map(R.show).join(", ");
+    case "values": return v && typeof v === "object" && !Array.isArray(v) ? Object.values(v) : R.list(v);
+    case "year": return R.date(v).getFullYear();
+    case "month": return R.date(v).getMonth() + 1;
+    case "day": return R.date(v).getDate();
+    case "weekday": return R.date(v).toLocaleDateString(undefined, { weekday: "long" });
   }
   return null;
 };
@@ -653,15 +666,27 @@ R.load = async (url) => {
     if (!res.ok) throw new Error(res.status + " " + res.statusText);
     const type = res.headers.get("content-type") || "";
     return type.includes("json") ? await res.json() : await res.text();
-  } catch (err) { R.toast("Couldn't load: " + err.message); throw err; }
+  } catch (err) {
+    // inside `try`, the app decides what to show; otherwise tell the person
+    const e = R.fail("Couldn't load: " + err.message);
+    if (R.tryDepth === 0) { R.toast(e.message); e.shown = true; }
+    throw e;
+  }
 };
 
 /* ---------- running actions ---------- */
 let depth = 0;
+R.tryDepth = 0;
+// `fail "message"` (Kotlin's throw)
+R.fail = (msg) => { const e = new Error(R.show(msg)); e.romit = true; return e; };
+R.errorText = (e) => (e && e.message) ? e.message : R.show(e);
 R.act = (fn) => async () => {
   depth++;
   try { await fn(); }
-  catch (err) { if (!(err instanceof TypeError && /fetch/i.test(err.message))) console.error("[romit]", err); }
+  catch (err) {
+    if (err && err.romit) { if (!err.shown) R.toast(err.message); }
+    else console.error("[romit]", err);
+  }
   finally { depth--; R.commit(); }
 };
 

@@ -83,6 +83,10 @@ for each n in 1 to 100
   say n
 ```
 
+## More
+
+Records, maps, `where` / `each` / `grouped by`, `match`, `try`, `ask`, enums, dates and `use` are covered in [Records, match, and errors](records-match-errors.md).
+
 ## Comments
 
 ```text

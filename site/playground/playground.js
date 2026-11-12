@@ -17,6 +17,9 @@ const BUILT_IN = {
   todo_list: { name: "Todo list", file: "todo_list.rmt" },
   traffic_light: { name: "Traffic light", file: "traffic_light.rmt" },
   lists: { name: "Lists and text", file: "lists.rmt" },
+  records: { name: "Records, maps, filters", file: "records.rmt" },
+  match_errors: { name: "match, enums, try / fail", file: "match_and_errors.rmt" },
+  quiz: { name: "Quiz with ask (uses Input)", file: "quiz.rmt" },
   app_counter: { name: "App: Counter (UI)", file: "counter.rmt" },
   app_todos: { name: "App: Todos (UI)", file: "todos.rmt" },
   app_notes: { name: "App: Notes (UI)", file: "notes.rmt" },
@@ -57,12 +60,12 @@ function saveHash() {
 }
 
 async function initWasm() {
-  const { default: init, run_program, check_program, test_program, romit_version, is_ui_program, build_ui_program } = await import(
+  const { default: init, run_program, run_program_with_input, check_program, test_program, romit_version, is_ui_program, build_ui_program } = await import(
     "./pkg/romit_wasm.js"
   );
   await init();
   statusEl.textContent = `Compiler WASM v${romit_version()} loaded`;
-  return { run_program, check_program, test_program, is_ui_program, build_ui_program };
+  return { run_program, run_program_with_input, check_program, test_program, is_ui_program, build_ui_program };
 }
 
 // Force the preview's look (auto = whatever device you are on).
@@ -101,7 +104,8 @@ function showResult(json) {
     output.textContent = data.stdout || "(ok, no output)";
   } else {
     output.classList.add("error");
-    output.textContent = data.diagnostics || "Error";
+    // keep what the program printed before it stopped
+    output.textContent = (data.stdout ? data.stdout + "\n" : "") + (data.diagnostics || "Error");
   }
   if (data.steps) {
     statusEl.textContent = `${data.steps} step(s)`;
@@ -124,6 +128,8 @@ async function runAction(mode) {
         if (mode === "check") return wasmReady.check_program(src);
         const head = src.trimStart();
         if (head.startsWith("spec")) return wasmReady.test_program(src);
+        const input = document.getElementById("input");
+        if (wasmReady.run_program_with_input) return wasmReady.run_program_with_input(src, input ? input.value : "");
         return wasmReady.run_program(src);
       }),
       timeout,

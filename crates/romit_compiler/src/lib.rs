@@ -28,6 +28,14 @@ pub fn compile_file(
         Ok(p) => p,
         Err(e) => return Err(e),
     };
+    let program = match program {
+        ast::Program::Script(script) if !script.uses.is_empty() => {
+            let mut seen = std::collections::HashSet::new();
+            seen.insert(std::path::PathBuf::from(file));
+            ast::Program::Script(resolve_uses(script, file, source, &mut seen)?)
+        }
+        other => other,
+    };
     let unit = match check_program(program, file, source) {
         Ok(u) => u,
         Err(e) => return Err(e),
@@ -135,4 +143,61 @@ pub fn run_source(
             diag::snippet_at(source, 1, 1, "file"),
         )]),
     }
+}
+
+/// Bring in `use "other.rmt"` files: their functions (and any top-level setup lines)
+/// come before this script's own lines. Paths are relative to the script.
+fn resolve_uses(
+    mut script: ast::Script,
+    file: &str,
+    source: &str,
+    seen: &mut std::collections::HashSet<std::path::PathBuf>,
+) -> Result<ast::Script, Vec<Diagnostic>> {
+    let dir = std::path::Path::new(file)
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_default();
+    let mut imported = Vec::new();
+    for (rel, span) in std::mem::take(&mut script.uses) {
+        let path = dir.join(&rel);
+        if !seen.insert(path.clone()) {
+            continue; // already used (or a cycle)
+        }
+        let shown = path.to_string_lossy().to_string();
+        let text = match std::fs::read_to_string(&path) {
+            Ok(t) => t,
+            Err(e) => {
+                return Err(vec![Diagnostic::error(
+                    "E120",
+                    format!("cannot use \"{rel}\": {e}"),
+                    file,
+                    span.line,
+                    span.column,
+                    diag::snippet_at(source, span.line, span.column, "use"),
+                )
+                .with_help(
+                    "the path is relative to this file, e.g. `use \"helpers.rmt\"` next to it",
+                )]);
+            }
+        };
+        match Parser::parse_file(&shown, &text)? {
+            ast::Program::Script(inner) => {
+                let inner = resolve_uses(inner, &shown, &text, seen)?;
+                imported.extend(inner.items);
+            }
+            ast::Program::Spec(_) => {
+                return Err(vec![Diagnostic::error(
+                    "E120",
+                    format!("\"{rel}\" is a spec; scripts can only use other scripts"),
+                    file,
+                    span.line,
+                    span.column,
+                    diag::snippet_at(source, span.line, span.column, "use"),
+                )]);
+            }
+        }
+    }
+    imported.append(&mut script.items);
+    script.items = imported;
+    Ok(script)
 }

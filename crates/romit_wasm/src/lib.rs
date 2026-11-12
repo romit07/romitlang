@@ -79,17 +79,51 @@ pub fn test_program(source: &str) -> String {
 
 #[wasm_bindgen]
 pub fn run_program(source: &str) -> String {
+    run_program_with_input(source, "")
+}
+
+/// Run a script; each line of `input` answers the next `ask "…"`.
+/// Output printed before an error is kept.
+#[wasm_bindgen]
+pub fn run_program_with_input(source: &str, input: &str) -> String {
+    use romit_compiler::interp::{set_ask_source, set_say_sink};
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
     let file = "playground.rmt";
-    let resp = match run_source(source, file, 50_000) {
+    let printed = Rc::new(RefCell::new(String::new()));
+    let sink = printed.clone();
+    set_say_sink(Some(Box::new(move |line: &str| {
+        let mut s = sink.borrow_mut();
+        s.push_str(line);
+        s.push('\n');
+    })));
+    let mut answers: std::collections::VecDeque<String> = input.lines().map(String::from).collect();
+    let echo = printed.clone();
+    set_ask_source(Some(Box::new(move |question: &str| {
+        let answer = answers.pop_front();
+        // show the exchange like a terminal would
+        let mut s = echo.borrow_mut();
+        s.push_str(question);
+        s.push(' ');
+        s.push_str(answer.as_deref().unwrap_or("(no input)"));
+        s.push('\n');
+        answer
+    })));
+    let result = run_source(source, file, 200_000);
+    set_say_sink(None);
+    set_ask_source(None);
+    let stdout = printed.borrow().clone();
+    let resp = match result {
         Ok(out) => ApiResponse {
             ok: true,
-            stdout: out.stdout,
+            stdout: stdout + &out.stdout,
             diagnostics: String::new(),
             steps: out.steps,
         },
         Err(diags) => ApiResponse {
             ok: false,
-            stdout: String::new(),
+            stdout,
             diagnostics: format_diagnostics(&diags),
             steps: 0,
         },
@@ -138,6 +172,20 @@ mod tests {
         let json = run_program(src);
         assert!(json.contains("Hello, world!"));
         assert!(json.contains("\"ok\":true"));
+    }
+
+    #[test]
+    fn ask_reads_input_lines() {
+        let json = run_program_with_input("name = ask \"Name?\"\nsay \"Hi {name}\"\n", "Ada\n");
+        assert!(json.contains("Hi Ada"), "{json}");
+        assert!(json.contains("Name? Ada"), "{json}");
+    }
+
+    #[test]
+    fn output_before_an_error_is_kept() {
+        let json = run_program("say \"before\"\nfail \"stop here\"\n");
+        assert!(json.contains("before"), "{json}");
+        assert!(json.contains("E901"), "{json}");
     }
 
     #[test]

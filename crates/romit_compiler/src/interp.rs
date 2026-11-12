@@ -1,8 +1,29 @@
 use crate::ast::*;
 use crate::check::{CheckedProgram, CheckedScript};
 use crate::diag::{snippet_at, Diagnostic};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Write as _;
+
+type SaySink = Box<dyn FnMut(&str)>;
+type AskSource = Box<dyn FnMut(&str) -> Option<String>>;
+
+thread_local! {
+    static SAY_SINK: RefCell<Option<SaySink>> = const { RefCell::new(None) };
+    static ASK_SOURCE: RefCell<Option<AskSource>> = const { RefCell::new(None) };
+}
+
+/// Send script output somewhere as it happens (a terminal, the playground).
+/// Without a sink, output is collected into [`RunOutcome::stdout`].
+pub fn set_say_sink(sink: Option<SaySink>) {
+    SAY_SINK.with(|s| *s.borrow_mut() = sink);
+}
+
+/// Answer `ask "Question?"` in scripts. The source gets the question and returns
+/// the answer, or `None` when there is no more input.
+pub fn set_ask_source(source: Option<AskSource>) {
+    ASK_SOURCE.with(|s| *s.borrow_mut() = source);
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -15,6 +36,8 @@ pub enum Value {
     Float(f64),
     /// Ordered list (`list 1, 2, 3`).
     List(Vec<Value>),
+    /// Named fields in order (`with name "Ada", age 36`, `map "tea" to 3`).
+    Record(Vec<(String, Value)>),
     Null,
 }
 
@@ -743,6 +766,11 @@ fn values_equal(a: &Value, b: &Value) -> bool {
         (Value::List(x), Value::List(y)) => {
             x.len() == y.len() && x.iter().zip(y).all(|(a, b)| values_equal(a, b))
         }
+        (Value::Record(x), Value::Record(y)) => {
+            x.len() == y.len()
+                && x.iter()
+                    .all(|(k, v)| y.iter().any(|(k2, v2)| k == k2 && values_equal(v, v2)))
+        }
         (Value::Null, Value::Null) => true,
         _ => false,
     }
@@ -775,6 +803,7 @@ fn truthy(v: &Value) -> bool {
         Value::Float(f) => *f != 0.0,
         Value::Text(s) => !s.is_empty(),
         Value::List(l) => !l.is_empty(),
+        Value::Record(r) => !r.is_empty(),
         _ => true,
     }
 }
@@ -804,6 +833,7 @@ fn eval_binary(op: &BinaryOp, l: &Value, r: &Value) -> Value {
         BinaryOp::In => Value::Bool(match r {
             Value::List(items) => items.iter().any(|it| values_equal(it, l)),
             Value::Text(hay) => hay.contains(&value_to_display(l)),
+            Value::Record(fields) => fields.iter().any(|(k, _)| *k == value_to_display(l)),
             _ => false,
         }),
     }
@@ -975,6 +1005,8 @@ impl ScriptInterpreter {
 struct ScriptEnv {
     locals: HashMap<String, Value>,
     call_depth: u32,
+    /// Top-level values, readable inside functions.
+    globals: std::rc::Rc<HashMap<String, Value>>,
 }
 
 enum ExecControl {
@@ -1002,7 +1034,16 @@ fn exec_script_stmt(
         }
         ScriptStmt::Say { parts, span } => {
             let line = format_say_parts(parts, rt, env, fns, file, source)?;
-            writeln!(out, "{line}").ok();
+            let streamed = SAY_SINK.with(|s| match s.borrow_mut().as_mut() {
+                Some(sink) => {
+                    sink(&line);
+                    true
+                }
+                None => false,
+            });
+            if !streamed {
+                writeln!(out, "{line}").ok();
+            }
             let _ = span;
             Ok(ExecControl::Next)
         }
@@ -1046,17 +1087,25 @@ fn exec_script_stmt(
             var,
             from,
             to,
+            step,
             body,
             ..
         } => {
             let start = to_i64(&eval_script_expr(rt, from, env, fns, file, source)?);
             let end = to_i64(&eval_script_expr(rt, to, env, fns, file, source)?);
-            let (lo, hi) = if start <= end {
-                (start, end)
-            } else {
-                (end, start)
+            // `5 to 1` counts down; `by 2` sets the step size
+            let size = match step {
+                Some(st) => to_i64(&eval_script_expr(rt, st, env, fns, file, source)?)
+                    .abs()
+                    .max(1),
+                None => 1,
             };
-            for i in lo..=hi {
+            let values: Vec<i64> = if start <= end {
+                (start..=end).step_by(size as usize).collect()
+            } else {
+                (end..=start).rev().step_by(size as usize).collect()
+            };
+            for i in values {
                 env.locals.insert(var.clone(), Value::Int(i));
                 match exec_script_block(body, rt, env, fns, file, source, out, in_fn)? {
                     ExecControl::Return(v) => return Ok(ExecControl::Return(v)),
@@ -1065,6 +1114,54 @@ fn exec_script_stmt(
                 }
             }
             Ok(ExecControl::Next)
+        }
+        ScriptStmt::SetPath {
+            root, path, value, ..
+        } => {
+            let v = eval_script_expr(rt, value, env, fns, file, source)?;
+            let mut keys = Vec::with_capacity(path.len());
+            for seg in path {
+                keys.push(match seg {
+                    PathSeg::Field(f) => f.clone(),
+                    PathSeg::Key(k) => {
+                        value_to_display(&eval_script_expr(rt, k, env, fns, file, source)?)
+                    }
+                });
+            }
+            let slot = env.locals.entry(root.clone()).or_insert(Value::Null);
+            set_in(slot, &keys, v);
+            Ok(ExecControl::Next)
+        }
+        ScriptStmt::Fail { message, span } => {
+            let m = value_to_display(&eval_script_expr(rt, message, env, fns, file, source)?);
+            Err(vec![Diagnostic::error(
+                "E901",
+                m,
+                file,
+                span.line,
+                span.column,
+                snippet_at(source, span.line, span.column, "fail"),
+            )
+            .with_help("handle it with `try` … `if it fails`")])
+        }
+        ScriptStmt::Try { body, handler, .. } => {
+            match exec_script_block(body, rt, env, fns, file, source, out, in_fn) {
+                Ok(ctrl) => Ok(ctrl),
+                // the step limit protects the machine; don't let `try` hide it
+                Err(diags) if diags.iter().any(|d| d.code == "E900") => Err(diags),
+                Err(diags) => {
+                    let msg = diags
+                        .first()
+                        .map(|d| d.message.clone())
+                        .unwrap_or_else(|| "something went wrong".into());
+                    if let Some(h) = handler {
+                        env.locals.insert("error".into(), Value::Text(msg));
+                        exec_script_block(h, rt, env, fns, file, source, out, in_fn)
+                    } else {
+                        Ok(ExecControl::Next)
+                    }
+                }
+            }
         }
         ScriptStmt::Stop { .. } => Ok(ExecControl::Stop),
         ScriptStmt::Skip { .. } => Ok(ExecControl::Skip),
@@ -1144,6 +1241,9 @@ fn stmt_span_stmt(stmt: &ScriptStmt) -> Span {
         | ScriptStmt::Repeat { span, .. }
         | ScriptStmt::ForEachRange { span, .. }
         | ScriptStmt::ForEachList { span, .. }
+        | ScriptStmt::SetPath { span, .. }
+        | ScriptStmt::Try { span, .. }
+        | ScriptStmt::Fail { span, .. }
         | ScriptStmt::Stop { span }
         | ScriptStmt::Skip { span }
         | ScriptStmt::While { span, .. }
@@ -1188,13 +1288,34 @@ fn eval_script_expr(
 ) -> Result<Value, Vec<Diagnostic>> {
     match expr {
         Expr::Literal(l, _) => Ok(literal_to_value(l)),
+        Expr::Path(p, span) if p.parts.len() > 1 => {
+            // `person.name`, `order.items.count`
+            let root = Expr::Path(
+                PathExpr {
+                    parts: vec![p.parts[0].clone()],
+                    span: span.clone(),
+                },
+                span.clone(),
+            );
+            let mut v = eval_script_expr(rt, &root, env, fns, file, source)?;
+            for f in &p.parts[1..] {
+                v = get_field(&v, f);
+            }
+            Ok(v)
+        }
         Expr::Path(p, span) => {
             if p.parts.len() == 1 {
                 let n = &p.parts[0];
+                if n == "nothing" || n == "none" {
+                    return Ok(Value::Null);
+                }
                 if let Some(v) = env.locals.get(n) {
                     return Ok(v.clone());
                 }
                 if let Some(v) = rt.state.get(n) {
+                    return Ok(v.clone());
+                }
+                if let Some(v) = env.globals.get(n) {
                     return Ok(v.clone());
                 }
                 if fns.contains_key(n) && !env.locals.contains_key(n) {
@@ -1205,6 +1326,32 @@ fn eval_script_expr(
                 }
             }
             Ok(Value::Null)
+        }
+        Expr::Call { name, args, .. }
+            if matches!(name.as_str(), "__where" | "__each")
+                && args.len() == 2
+                && !fns.contains_key(name) =>
+        {
+            let items = as_list(eval_script_expr(rt, &args[0], env, fns, file, source)?);
+            let mut out = Vec::new();
+            for it in items {
+                // `it` is the item; a record's fields are also visible by name
+                let mut inner = env.clone();
+                if let Value::Record(fields) = &it {
+                    // the item's own fields win over outer names (like Kotlin's `it.age`)
+                    for (k, v) in fields {
+                        inner.locals.insert(k.clone(), v.clone());
+                    }
+                }
+                inner.locals.insert("it".into(), it.clone());
+                let v = eval_script_expr(rt, &args[1], &inner, fns, file, source)?;
+                if name == "__each" {
+                    out.push(v);
+                } else if truthy(&v) {
+                    out.push(it);
+                }
+            }
+            Ok(Value::List(out))
         }
         Expr::Call {
             name,
@@ -1253,6 +1400,16 @@ fn call_script_fn(
     source: &str,
     span: &Span,
 ) -> Result<Value, Vec<Diagnostic>> {
+    if name == "__record" && !fns.contains_key(name) {
+        let mut fields = Vec::with_capacity(named.len());
+        for n in named {
+            fields.push((
+                n.name.clone(),
+                eval_script_expr(rt, &n.value, env, fns, file, source)?,
+            ));
+        }
+        return Ok(Value::Record(fields));
+    }
     let Some(defn) = fns.get(name) else {
         let mut vals = Vec::with_capacity(args.len());
         for a in args {
@@ -1269,11 +1426,16 @@ fn call_script_fn(
             span.column,
             snippet_at(source, span.line, span.column, name),
         )
-        .with_help("add a base case or simplify mutual recursion")]);
+        .with_help(format!("check the base case; also note a call takes the rest of its line, so `{name} n minus 1 plus {name} n minus 2` means {name}(n minus 1 plus {name}(n minus 2)). Put each call on its own line:\n  a = {name} n minus 1\n  b = {name} n minus 2\n  give a plus b"))]);
     }
     let mut call_env = ScriptEnv {
         locals: HashMap::new(),
         call_depth: env.call_depth + 1,
+        globals: if env.call_depth == 0 {
+            std::rc::Rc::new(env.locals.clone())
+        } else {
+            env.globals.clone()
+        },
     };
     let mut pos = 0usize;
     for param in &defn.params {
@@ -1355,7 +1517,87 @@ pub fn value_to_display(v: &Value) -> String {
             .map(value_to_display)
             .collect::<Vec<_>>()
             .join(", "),
+        Value::Record(fields) => format!(
+            "({})",
+            fields
+                .iter()
+                .map(|(k, v)| match v {
+                    Value::Text(t) => format!("{k}: \"{t}\""),
+                    other => format!("{k}: {}", value_to_display(other)),
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         Value::Null => "nothing".into(),
+    }
+}
+
+/// Days since 1970-01-01 → (year, month, day). Dates are plain text like "2026-11-12" (UTC).
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+/// "2026-11-12" (optionally followed by a time) → days since 1970-01-01.
+fn parse_date(t: &str) -> Option<i64> {
+    let date = t.trim().split([' ', 'T']).next()?;
+    let mut parts = date.split('-');
+    let y: i64 = parts.next()?.parse().ok()?;
+    let m: i64 = parts.next()?.parse().ok()?;
+    let d: i64 = parts.next()?.parse().ok()?;
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return None;
+    }
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y.rem_euclid(400);
+    let mp = (m + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    Some(era * 146_097 + doe - 719_468)
+}
+
+/// Read a field of a record. `count`, `length` and `size` also work on lists and text.
+fn get_field(v: &Value, f: &str) -> Value {
+    if let Value::Record(fields) = v {
+        if let Some((_, x)) = fields.iter().find(|(k, _)| k == f) {
+            return x.clone();
+        }
+    }
+    match f {
+        "count" | "length" | "size" => call_builtin("count", vec![v.clone()]),
+        "first" | "last" | "keys" | "values" | "upper" | "lower" | "trim" => {
+            call_builtin(f, vec![v.clone()])
+        }
+        _ => Value::Null,
+    }
+}
+
+/// Write `value` at `keys` inside `slot`, creating records along the way.
+fn set_in(slot: &mut Value, keys: &[String], value: Value) {
+    let Some((first, rest)) = keys.split_first() else {
+        *slot = value;
+        return;
+    };
+    if !matches!(slot, Value::Record(_)) {
+        *slot = Value::Record(Vec::new());
+    }
+    if let Value::Record(fields) = slot {
+        if let Some((_, existing)) = fields.iter_mut().find(|(k, _)| k == first) {
+            set_in(existing, rest, value);
+        } else {
+            let mut fresh = Value::Null;
+            set_in(&mut fresh, rest, value);
+            fields.push((first.clone(), fresh));
+        }
     }
 }
 
@@ -1410,6 +1652,195 @@ pub fn call_builtin(name: &str, mut args: Vec<Value>) -> Value {
             let (a, b) = (to_i64(&first), to_i64(&second));
             Value::List((a.min(b)..=a.max(b)).map(Value::Int).collect())
         }
+        "__map" => {
+            let mut fields: Vec<(String, Value)> = Vec::new();
+            let mut all = vec![first, second];
+            all.extend(args);
+            for pair in all.chunks(2) {
+                let k = value_to_display(&pair[0]);
+                let v = pair.get(1).cloned().unwrap_or(Value::Null);
+                if let Some(slot) = fields.iter_mut().find(|(x, _)| *x == k) {
+                    slot.1 = v;
+                } else {
+                    fields.push((k, v));
+                }
+            }
+            Value::Record(fields)
+        }
+        "ask" => {
+            let question = match first {
+                Value::Null => String::new(),
+                other => value_to_display(&other),
+            };
+            let answer =
+                ASK_SOURCE.with(|s| s.borrow_mut().as_mut().and_then(|ask| ask(&question)));
+            match answer {
+                Some(a) => {
+                    let a = a.trim_end_matches(['\n', '\r']).to_string();
+                    // numbers come back as numbers, so `age = ask "Age?"` can do math
+                    // (only when the number reads back the same, so "007" stays text)
+                    let t = a.trim();
+                    match (t.parse::<i64>(), t.parse::<f64>()) {
+                        (Ok(n), _) if n.to_string() == t => Value::Int(n),
+                        (_, Ok(f)) if format_float(f) == t => Value::Float(f),
+                        _ => Value::Text(a),
+                    }
+                }
+                None => Value::Null,
+            }
+        }
+        "__or_else" => match first {
+            Value::Null => second,
+            Value::Text(ref t) if t.is_empty() => second,
+            other => other,
+        },
+        "__sortby" => {
+            let field = value_to_display(&second);
+            let desc = args.first().is_some_and(truthy);
+            let mut l = as_list(first);
+            if field.is_empty() {
+                sort_values(&mut l);
+            } else {
+                l.sort_by(|a, b| {
+                    let (x, y) = (get_field(a, &field), get_field(b, &field));
+                    match (as_num(&x), as_num(&y)) {
+                        (Some(p), Some(q)) => {
+                            p.partial_cmp(&q).unwrap_or(std::cmp::Ordering::Equal)
+                        }
+                        _ => value_to_display(&x).cmp(&value_to_display(&y)),
+                    }
+                });
+            }
+            if desc {
+                l.reverse();
+            }
+            Value::List(l)
+        }
+        "__group" => {
+            let field = value_to_display(&second);
+            let mut groups: Vec<(String, Value)> = Vec::new();
+            for it in as_list(first) {
+                let k = value_to_display(&get_field(&it, &field));
+                match groups.iter_mut().find(|(g, _)| *g == k) {
+                    Some((_, Value::List(l))) => l.push(it),
+                    _ => groups.push((k, Value::List(vec![it]))),
+                }
+            }
+            Value::Record(groups)
+        }
+        "take" | "__take_last" | "drop" => {
+            let n = to_i64(&first).max(0) as usize;
+            let is_text = matches!(second, Value::Text(_));
+            let l: Vec<Value> = match second {
+                Value::Text(t) => t.chars().map(|c| Value::Text(c.to_string())).collect(),
+                other => as_list(other),
+            };
+            let n = n.min(l.len());
+            let part: Vec<Value> = match name {
+                "take" => l[..n].to_vec(),
+                "drop" => l[n..].to_vec(),
+                _ => l[l.len() - n..].to_vec(),
+            };
+            if is_text {
+                Value::Text(part.iter().map(value_to_display).collect())
+            } else {
+                Value::List(part)
+            }
+        }
+        "slice" => {
+            let (a, b) = (to_i64(&first), to_i64(&second));
+            let src = args.into_iter().next().unwrap_or(Value::Null);
+            let is_text = matches!(src, Value::Text(_));
+            let l: Vec<Value> = match src {
+                Value::Text(t) => t.chars().map(|c| Value::Text(c.to_string())).collect(),
+                other => as_list(other),
+            };
+            let lo = (a.max(1) - 1) as usize;
+            let hi = (b.max(0) as usize).min(l.len());
+            let part = if lo < hi {
+                l[lo..hi].to_vec()
+            } else {
+                Vec::new()
+            };
+            if is_text {
+                Value::Text(part.iter().map(value_to_display).collect())
+            } else {
+                Value::List(part)
+            }
+        }
+        "today" | "now" => {
+            let secs = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            let (y, m, d) = civil_from_days(secs.div_euclid(86_400));
+            if name == "today" {
+                Value::Text(format!("{y:04}-{m:02}-{d:02}"))
+            } else {
+                let s = secs.rem_euclid(86_400);
+                Value::Text(format!(
+                    "{y:04}-{m:02}-{d:02} {:02}:{:02}",
+                    s / 3600,
+                    (s % 3600) / 60
+                ))
+            }
+        }
+        "year" | "month" | "day" | "weekday" => match parse_date(&value_to_display(&first)) {
+            Some(days) => {
+                let (y, m, d) = civil_from_days(days);
+                match name {
+                    "year" => Value::Int(y),
+                    "month" => Value::Int(m as i64),
+                    "day" => Value::Int(d as i64),
+                    _ => Value::Text(
+                        [
+                            "Thursday",
+                            "Friday",
+                            "Saturday",
+                            "Sunday",
+                            "Monday",
+                            "Tuesday",
+                            "Wednesday",
+                        ][days.rem_euclid(7) as usize]
+                            .into(),
+                    ),
+                }
+            }
+            None => Value::Null,
+        },
+        "__days_between" => match (
+            parse_date(&value_to_display(&first)),
+            parse_date(&value_to_display(&second)),
+        ) {
+            (Some(a), Some(b)) => Value::Int(b - a),
+            _ => Value::Null,
+        },
+        "replace" => {
+            let (from, to) = (
+                value_to_display(&second),
+                value_to_display(&args.into_iter().next().unwrap_or(Value::Null)),
+            );
+            let text = value_to_display(&first);
+            Value::Text(if from.is_empty() {
+                text
+            } else {
+                text.replace(&from, &to)
+            })
+        }
+        "__starts_with" => {
+            Value::Bool(value_to_display(&first).starts_with(&value_to_display(&second)))
+        }
+        "__ends_with" => {
+            Value::Bool(value_to_display(&first).ends_with(&value_to_display(&second)))
+        }
+        "keys" => match first {
+            Value::Record(f) => Value::List(f.into_iter().map(|(k, _)| Value::Text(k)).collect()),
+            _ => Value::List(Vec::new()),
+        },
+        "values" => match first {
+            Value::Record(f) => Value::List(f.into_iter().map(|(_, v)| v).collect()),
+            other => Value::List(as_list(other)),
+        },
         "__append" => {
             let mut l = as_list(first);
             l.push(second);
@@ -1425,6 +1856,7 @@ pub fn call_builtin(name: &str, mut args: Vec<Value>) -> Value {
         }
         "count" | "size" | "length" => match first {
             Value::List(l) => Value::Int(l.len() as i64),
+            Value::Record(r) => Value::Int(r.len() as i64),
             Value::Text(t) => Value::Int(t.chars().count() as i64),
             Value::Null => Value::Int(0),
             _ => Value::Int(1),
@@ -1447,6 +1879,9 @@ pub fn call_builtin(name: &str, mut args: Vec<Value>) -> Value {
                 .unwrap_or(Value::Null),
             other => other,
         },
+        "item" if matches!(second, Value::Record(_)) => {
+            get_field(&second, &value_to_display(&first))
+        }
         "item" => {
             let idx = to_i64(&first);
             let l = match second {

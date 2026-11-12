@@ -251,3 +251,33 @@ fn runtime_adapts_to_device() {
     assert!(html.contains("function resolveLook()"));
     assert!(html.contains("data-look=\"material\""));
 }
+
+// ---------- Kotlin-inspired features in apps ----------
+
+#[test]
+fn app_match_try_enum_and_transforms() {
+    let js = ok("use ui\nenum Team core, ui\nstate\n  people is list\n    name \"Ada\", team \"core\"\n  pick is \"core\"\n  status is \"\"\ncomputed\n  names is people each name\n  groups is people grouped by team\n  leader is first 1 of people\nscreen Home\n  match pick\n    core\n      text \"Core\"\n    otherwise\n      text \"Other\"\n  text \"{names} {leader} {replace \"a\" with \"b\" in \"aa\"} {\"x\" starts with \"x\"} {pick or else \"none\"}\"\n  for each n in 9 to 1 by 4\n    text \"{n}\"\n  button \"Go\" do attempt\naction attempt\n  try\n    fail \"nope\"\n  if it fails\n    status = error\n");
+    for want in [
+        "C.core = () => \"core\"",
+        "C.Team = () => [\"core\", \"ui\"]",
+        "R.list(S.people).map((L_it)",
+        "R.group(S.people, \"team\")",
+        "R.take(1, S.people, false)",
+        ".split(R.show(\"a\")).join(R.show(\"b\"))",
+        ".startsWith(",
+        "R.orElse(S.pick, \"none\")",
+        "R.of(\"__range\", [9, 1, 4])",
+        "R.tryDepth++;",
+        "throw R.fail(\"nope\");",
+        "S.status = R.copy(L_error);",
+    ] {
+        assert!(js.contains(want), "missing {want}");
+    }
+    err("use ui\nscreen Home\n  match 1\n    otherwise\n      text \"a\"\n    2\n      text \"b\"\n", "P024");
+}
+
+#[test]
+fn item_fields_win_inside_where() {
+    let js = ok("use ui\nstate\n  age is 100\n  people is list\n    name \"A\", age 5\ncomputed\n  young is people where age is below 10\nscreen Home\n  text \"{young}\"\n");
+    assert!(js.contains("R.pick(it, \"age\", () => S.age)"));
+}

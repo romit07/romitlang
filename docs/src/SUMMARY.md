@@ -34,6 +34,7 @@
 - [Operators](language/operators.md)
 - [Strings and join](language/strings.md)
 - [Lists, text, and numbers](language/lists.md)
+- [Records, match, and errors](language/records-match-errors.md)
 - [Optional spec layer](language/spec-layer.md)
 
 # Examples
@@ -45,6 +46,7 @@
 # Reference
 
 - [SwiftUI → Romit](reference/swiftui-map.md)
+- [Kotlin → Romit](reference/kotlin-map.md)
 - [Swift feature map](reference/swift-feature-map.md)
 - [Error codes](reference/errors.md)
 - [Roadmap](reference/roadmap.md)

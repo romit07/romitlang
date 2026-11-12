@@ -13,6 +13,15 @@ pub struct Parser {
     list_item_mode: bool,
     /// When set, a matching word ends expression parsing (e.g. `times` after `repeat N`).
     expr_stop_word: Option<String>,
+    /// Functions defined in this file, so `check -2` is a call, not `check minus 2`.
+    fn_names: std::collections::HashSet<String>,
+    /// Inside a `where` / `each` body: a later `where` belongs to the outer list.
+    in_where: usize,
+    /// Parsing the items of `list …`: `with` starts a record, not named arguments.
+    list_args: bool,
+    /// The list in `first 3 of …` / `item 2 of …`: filters belong to it, but `each` and
+    /// `grouped by` apply to the picked result.
+    tight: usize,
 }
 
 impl Parser {
@@ -25,6 +34,20 @@ impl Parser {
                 return Err(vec![d]);
             }
         };
+        let fn_names = source
+            .lines()
+            .filter(|l| !l.starts_with(' '))
+            .filter_map(|l| {
+                let mut w = l.split_whitespace();
+                match w.next()? {
+                    "fn" | "function" => w.next().map(String::from),
+                    first if first.ends_with(':') && first.len() > 1 => {
+                        Some(first.trim_end_matches(':').to_string())
+                    }
+                    _ => None,
+                }
+            })
+            .collect();
         let mut p = Parser {
             file: file.to_string(),
             source: source.to_string(),
@@ -33,6 +56,10 @@ impl Parser {
             errors: Vec::new(),
             list_item_mode: false,
             expr_stop_word: None,
+            fn_names,
+            in_where: 0,
+            list_args: false,
+            tight: 0,
         };
         p.skip_newlines();
         let is_spec = matches!(p.peek().kind, TokenKind::Ident(ref s) if s == "spec");
@@ -54,6 +81,7 @@ impl Parser {
     fn parse_script(&mut self) -> Result<Script, Diagnostic> {
         let span = self.span();
         let mut items = Vec::new();
+        let mut uses = Vec::new();
         while !matches!(self.peek().kind, TokenKind::Eof) {
             self.skip_top_level();
             if matches!(self.peek().kind, TokenKind::Eof) {
@@ -79,6 +107,26 @@ impl Parser {
                     ));
                 }
             }
+            if self.peek_word().as_deref() == Some("use")
+                && matches!(
+                    self.tokens.get(self.pos + 1).map(|t| &t.kind),
+                    Some(TokenKind::String(_))
+                )
+            {
+                // `use "helpers.rmt"`: resolved by the compiler after parsing
+                let span = self.span();
+                self.bump();
+                if let TokenKind::String(path) = self.bump().kind {
+                    uses.push((path, span));
+                }
+                self.skip_newlines();
+                continue;
+            }
+            if self.peek_word().as_deref() == Some("enum") {
+                items.extend(self.parse_script_enum()?.into_iter().map(ScriptItem::Stmt));
+                self.skip_newlines();
+                continue;
+            }
             if self.peek_script_fn_def() {
                 items.push(ScriptItem::Fn(self.parse_script_fn()?));
             } else if matches!(self.peek_word().as_deref(), Some("fn") | Some("function")) {
@@ -88,7 +136,7 @@ impl Parser {
             }
             self.skip_newlines();
         }
-        Ok(Script { items, span })
+        Ok(Script { items, span, uses })
     }
 
     fn peek_script_fn_def(&self) -> bool {
@@ -130,6 +178,47 @@ impl Parser {
             snippet_at(&self.source, t.line, t.column, "fn"),
         )
         .with_help("write `fn name …` or `name: …` with an indented body; calls stay `name 3, 4`")
+    }
+
+    /// `enum Size small, medium, large` (Kotlin's enum class): each value becomes a
+    /// constant (`small` is "small") and `Size` is the list of values (Kotlin's `entries`).
+    fn parse_script_enum(&mut self) -> Result<Vec<ScriptStmt>, Diagnostic> {
+        let span = self.span();
+        self.bump();
+        let name = self.word()?;
+        let mut values = Vec::new();
+        while !self.at_physical_line_end() {
+            if matches!(self.peek().kind, TokenKind::Comma) {
+                self.bump();
+                continue;
+            }
+            values.push((self.word()?, self.span()));
+        }
+        if values.is_empty() {
+            return Err(self
+                .err_here("the values, e.g. `enum Size small, medium, large`")
+                .with_help("list the choices after the name"));
+        }
+        let text = |v: &str, sp: &Span| Expr::Literal(Literal::Text(v.to_string()), sp.clone());
+        let mut out: Vec<ScriptStmt> = values
+            .iter()
+            .map(|(v, sp)| ScriptStmt::Set {
+                name: v.clone(),
+                value: text(v, sp),
+                span: sp.clone(),
+            })
+            .collect();
+        out.push(ScriptStmt::Set {
+            name,
+            value: Expr::Call {
+                name: "list".into(),
+                args: values.iter().map(|(v, sp)| text(v, sp)).collect(),
+                named: Vec::new(),
+                span: span.clone(),
+            },
+            span,
+        });
+        Ok(out)
     }
 
     fn parse_script_fn(&mut self) -> Result<ScriptFn, Diagnostic> {
@@ -261,22 +350,31 @@ impl Parser {
             }
             "set" => {
                 self.bump();
-                let name = self.word()?;
+                let (name, path) = self.parse_set_target()?;
                 if self.word()? != "to" {
                     return Err(self.err_here("'to' after variable name"));
                 }
                 let value = self.parse_expr_until_line()?;
-                Ok(ScriptStmt::Set {
-                    name,
-                    value,
-                    span: stmt_span,
-                })
+                if path.is_empty() {
+                    Ok(ScriptStmt::Set {
+                        name,
+                        value,
+                        span: stmt_span,
+                    })
+                } else {
+                    Ok(ScriptStmt::SetPath {
+                        root: name,
+                        path,
+                        value,
+                        span: stmt_span,
+                    })
+                }
             }
             "give" => {
                 if !in_fn {
                     return Err(Diagnostic::error(
                         "P022",
-                        "`give` is only allowed inside a `to` function body",
+                        "`give` is only allowed inside a function body (`fn name …`)",
                         &self.file,
                         self.peek().line,
                         self.peek().column,
@@ -294,6 +392,41 @@ impl Parser {
                 })
             }
             "if" => self.parse_script_if_chain(stmt_span, in_fn),
+            "match" | "when" => self.parse_script_match(stmt_span, in_fn),
+            "try" if self.next_is_line_end(1) => {
+                self.bump();
+                self.skip_newlines();
+                self.expect_indent()?;
+                let body = self.parse_script_block(in_fn)?;
+                self.expect_dedent()?;
+                self.skip_newlines();
+                let mut handler = None;
+                if self.peek_word().as_deref() == Some("if")
+                    && self.peek_word_at(1).as_deref() == Some("it")
+                    && self.peek_word_at(2).as_deref() == Some("fails")
+                {
+                    self.bump();
+                    self.bump();
+                    self.bump();
+                    self.skip_newlines();
+                    self.expect_indent()?;
+                    handler = Some(self.parse_script_block(in_fn)?);
+                    self.expect_dedent()?;
+                }
+                Ok(ScriptStmt::Try {
+                    body,
+                    handler,
+                    span: stmt_span,
+                })
+            }
+            "fail" if !self.next_is_line_end(1) => {
+                self.bump();
+                let message = self.parse_expr_until_line()?;
+                Ok(ScriptStmt::Fail {
+                    message,
+                    span: stmt_span,
+                })
+            }
             "otherwise" => Err(Diagnostic::error(
                 "P024",
                 "`otherwise` must follow an `if` or `otherwise if` block",
@@ -355,7 +488,16 @@ impl Parser {
                         self.err_here("'to' after range start (e.g. `1 to 5`), or a list name")
                     );
                 }
-                let to = self.parse_range_endpoint()?;
+                self.expr_stop_word = Some("by".into());
+                let to = self.parse_range_endpoint();
+                self.expr_stop_word = None;
+                let to = to?;
+                let step = if self.peek_word().as_deref() == Some("by") {
+                    self.bump();
+                    Some(self.parse_range_endpoint()?)
+                } else {
+                    None
+                };
                 self.skip_newlines();
                 self.expect_indent()?;
                 let body = self.parse_script_block(in_fn)?;
@@ -364,6 +506,7 @@ impl Parser {
                     var,
                     from,
                     to,
+                    step,
                     body,
                     span: stmt_span,
                 })
@@ -446,6 +589,54 @@ impl Parser {
                     span: stmt_span,
                 })
             }
+            _ if matches!(
+                self.tokens.get(self.pos + 1).map(|t| &t.kind),
+                Some(TokenKind::Dot)
+            ) =>
+            {
+                let (root, path) = self.parse_set_target()?;
+                let op = self.bump().kind;
+                let value = self.parse_expr_until_line()?;
+                let value = match op {
+                    TokenKind::Assign => value,
+                    TokenKind::PlusAssign | TokenKind::MinusAssign => {
+                        let mut parts = vec![root.clone()];
+                        for seg in &path {
+                            if let PathSeg::Field(f) = seg {
+                                parts.push(f.clone());
+                            }
+                        }
+                        let current = Expr::Path(
+                            PathExpr {
+                                parts,
+                                span: stmt_span.clone(),
+                            },
+                            stmt_span.clone(),
+                        );
+                        Expr::Binary {
+                            op: if matches!(op, TokenKind::PlusAssign) {
+                                BinaryOp::Add
+                            } else {
+                                BinaryOp::Sub
+                            },
+                            left: Box::new(current),
+                            right: Box::new(value),
+                            span: stmt_span.clone(),
+                        }
+                    }
+                    _ => {
+                        return Err(self
+                            .err_here("`=` after the field name")
+                            .with_help("change a field with `person.age = 37`"))
+                    }
+                };
+                Ok(ScriptStmt::SetPath {
+                    root,
+                    path,
+                    value,
+                    span: stmt_span,
+                })
+            }
             _ => {
                 let next = self.tokens.get(self.pos + 1).map(|t| t.kind.clone());
                 if matches!(
@@ -481,6 +672,207 @@ impl Parser {
                 })
             }
         }
+    }
+
+    /// `item 2 of xs`, `first 3 of xs`, `last 2 of xs`, `items 2 to 4 of xs`, `letters 1 to 3 of t`
+    fn special_list_form_ahead(&self) -> bool {
+        let w = self.peek_word();
+        let at = |n: usize| match self.tokens.get(self.pos + n).map(|t| &t.kind) {
+            Some(TokenKind::Ident(s)) => Some(s.as_str()),
+            _ => None,
+        };
+        match w.as_deref() {
+            Some("item") | Some("first") | Some("last") => {
+                at(2) == Some("of") && at(1) != Some("of")
+            }
+            Some("items") | Some("letters") => at(2) == Some("to"),
+            Some("replace") => self.line_has_word("with") && self.line_has_word("in"),
+            _ => false,
+        }
+    }
+
+    /// The list after `of` in `item 2 of xs`: taken tightly, so `item t of teams each name`
+    /// applies `each` to the item, not to `teams`.
+    fn parse_tight_list(&mut self) -> Result<Expr, Diagnostic> {
+        self.tight += 1;
+        let e = self.parse_unary_line();
+        self.tight -= 1;
+        e
+    }
+
+    /// `list -5, 3`: a list that starts with a negative number, not `list minus 5`.
+    fn list_of_negative(&self, name: &str) -> bool {
+        let callable = name == "list"
+            || self.fn_names.contains(name)
+            || (crate::check::is_script_builtin(name)
+                && !matches!(name, "today" | "now" | "nothing"));
+        callable
+            && matches!(self.peek().kind, TokenKind::Minus)
+            && matches!(
+                self.tokens.get(self.pos + 1).map(|t| &t.kind),
+                Some(TokenKind::Int(_)) | Some(TokenKind::Decimal(_))
+            )
+    }
+
+    /// `name`, `p.name.first`, or `item "key" of prices`
+    fn parse_set_target(&mut self) -> Result<(String, Vec<PathSeg>), Diagnostic> {
+        if self.peek_word().as_deref() == Some("item")
+            && matches!(self.tokens.get(self.pos + 2).map(|t| &t.kind), Some(TokenKind::Ident(ref of)) if of == "of")
+        {
+            self.bump();
+            let key = self.parse_expr_primary()?;
+            self.bump(); // of
+            let (root, mut path) = self.parse_set_target()?;
+            path.push(PathSeg::Key(key));
+            return Ok((root, path));
+        }
+        let root = self.word()?;
+        let mut path = Vec::new();
+        while matches!(self.peek().kind, TokenKind::Dot) {
+            self.bump();
+            path.push(PathSeg::Field(self.word()?));
+        }
+        Ok((root, path))
+    }
+
+    /// `match size` with arms `"S"`, `"M", "L"`, `above 10`, `otherwise` (Kotlin's `when`).
+    /// Turned into an `if` / `otherwise if` chain.
+    fn parse_script_match(&mut self, span: Span, in_fn: bool) -> Result<ScriptStmt, Diagnostic> {
+        self.bump();
+        let subj_start = self.pos;
+        let subject = if self.at_line_end() {
+            None
+        } else {
+            Some(self.parse_expr_until_line()?)
+        };
+        let subj_tokens: Vec<Token> = self.tokens[subj_start..self.pos].to_vec();
+        self.skip_newlines();
+        if !matches!(self.peek().kind, TokenKind::Indent) {
+            return Err(self.err_here("indented arms under `match`").with_help(
+                "match size\n  \"S\"\n    say \"small\"\n  otherwise\n    say \"other\"",
+            ));
+        }
+        self.expect_indent()?;
+        let mut branches: Vec<(Option<Expr>, Vec<ScriptStmt>, Span)> = Vec::new();
+        loop {
+            self.skip_newlines();
+            if matches!(self.peek().kind, TokenKind::Dedent | TokenKind::Eof) {
+                break;
+            }
+            let arm_span = self.span();
+            let cond = if matches!(
+                self.peek_word().as_deref(),
+                Some("otherwise") | Some("else")
+            ) {
+                self.bump();
+                None
+            } else if let Some(subject) = &subject {
+                let comparator = matches!(
+                    self.peek_word().as_deref(),
+                    Some("is" | "isnt" | "above" | "below" | "contains" | "has" | "in")
+                ) || matches!(
+                    self.peek().kind,
+                    TokenKind::Lt
+                        | TokenKind::Gt
+                        | TokenKind::Le
+                        | TokenKind::Ge
+                        | TokenKind::Eq
+                        | TokenKind::Ne
+                );
+                if comparator {
+                    // `above 30` means `<subject> above 30`
+                    for (i, t) in subj_tokens.iter().enumerate() {
+                        let mut t = t.clone();
+                        t.line = arm_span.line;
+                        t.column = arm_span.column;
+                        self.tokens.insert(self.pos + i, t);
+                    }
+                    Some(self.parse_expr_until_line()?)
+                } else {
+                    let prev = self.list_item_mode;
+                    self.list_item_mode = true;
+                    let mut cond: Option<Expr> = None;
+                    loop {
+                        let v = self.parse_add_line()?;
+                        let eq = Expr::Binary {
+                            op: BinaryOp::Eq,
+                            left: Box::new(subject.clone()),
+                            right: Box::new(v),
+                            span: arm_span.clone(),
+                        };
+                        cond = Some(match cond {
+                            None => eq,
+                            Some(c) => Expr::Binary {
+                                op: BinaryOp::Or,
+                                left: Box::new(c),
+                                right: Box::new(eq),
+                                span: arm_span.clone(),
+                            },
+                        });
+                        if matches!(self.peek().kind, TokenKind::Comma) {
+                            self.bump();
+                            continue;
+                        }
+                        break;
+                    }
+                    self.list_item_mode = prev;
+                    cond
+                }
+            } else {
+                Some(self.parse_expr_until_line()?)
+            };
+            self.skip_newlines();
+            if !matches!(self.peek().kind, TokenKind::Indent) {
+                return Err(self.err_here("indented lines under this `match` arm"));
+            }
+            self.expect_indent()?;
+            let body = self.parse_script_block(in_fn)?;
+            self.expect_dedent()?;
+            branches.push((cond, body, arm_span));
+        }
+        self.expect_dedent()?;
+        if let Some(pos) = branches.iter().position(|b| b.0.is_none()) {
+            if pos != branches.len() - 1 {
+                return Err(Diagnostic::error(
+                    "P024",
+                    "`otherwise` must be the last arm of a `match`",
+                    &self.file,
+                    branches[pos].2.line,
+                    branches[pos].2.column,
+                    snippet_at(
+                        &self.source,
+                        branches[pos].2.line,
+                        branches[pos].2.column,
+                        "otherwise",
+                    ),
+                ));
+            }
+        }
+        let mut iter = branches.into_iter();
+        let Some((Some(cond), body, _)) = iter.next() else {
+            return Err(self
+                .err_here("at least one arm before `otherwise`")
+                .with_help("match size\n  \"S\"\n    say \"small\""));
+        };
+        let mut elif = Vec::new();
+        let mut else_body = None;
+        for (c, b, sp) in iter {
+            match c {
+                Some(c) => elif.push(ScriptElif {
+                    cond: c,
+                    body: b,
+                    span: sp,
+                }),
+                None => else_body = Some(b),
+            }
+        }
+        Ok(ScriptStmt::If {
+            cond,
+            body,
+            elif,
+            else_body,
+            span,
+        })
     }
 
     fn compound_set(&self, name: String, op: BinaryOp, amount: Expr, span: Span) -> ScriptStmt {
@@ -647,10 +1039,7 @@ impl Parser {
     }
 
     fn parse_say_part_expr(&mut self, rest_of_line: bool) -> Result<Expr, Diagnostic> {
-        let item_of = matches!(
-            self.tokens.get(self.pos + 2).map(|t| &t.kind),
-            Some(TokenKind::Ident(ref of)) if of == "of"
-        ) && self.peek_word().as_deref() == Some("item");
+        let item_of = self.special_list_form_ahead();
         if let Some(w) = self.peek_word().filter(|_| !item_of) {
             if user_callable_name(&w) {
                 let saved_pos = self.pos;
@@ -667,9 +1056,14 @@ impl Parser {
                     )
                     .with_help("define with `name: …`, `fn name …`, or `function name …`"));
                 }
-                if self.looks_like_call_suffix() {
-                    let (args, named) =
-                        self.parse_call_args_line(CallArgMode::SayPart { rest_of_line })?;
+                if self.looks_like_call_suffix() || self.list_of_negative(&name) {
+                    let (args, named) = {
+                        let prev_list = std::mem::replace(&mut self.list_args, name == "list");
+                        let parsed =
+                            self.parse_call_args_line(CallArgMode::SayPart { rest_of_line });
+                        self.list_args = prev_list;
+                        parsed?
+                    };
                     return Ok(Expr::Call {
                         name,
                         args,
@@ -1631,6 +2025,18 @@ impl Parser {
         while self.peek_word() == Some("or".into()) && !self.at_line_end() {
             let span = self.span();
             self.bump();
+            if self.peek_word().as_deref() == Some("else") {
+                // `name or else "friend"`: use the right side when the left is nothing
+                self.bump();
+                let fallback = self.parse_and_line()?;
+                e = Expr::Call {
+                    name: "__or_else".into(),
+                    args: vec![e, fallback],
+                    named: Vec::new(),
+                    span,
+                };
+                continue;
+            }
             let r = self.parse_and_line()?;
             e = Expr::Binary {
                 op: BinaryOp::Or,
@@ -1718,6 +2124,22 @@ impl Parser {
         loop {
             if self.at_line_end() {
                 break;
+            }
+            if matches!(self.peek_word().as_deref(), Some("starts") | Some("ends"))
+                && self.peek_word_at(1).as_deref() == Some("with")
+            {
+                // `name starts with "A"`, `file ends with ".txt"`
+                let span = self.span();
+                let which = self.word()?;
+                self.bump();
+                let r = self.parse_add_line()?;
+                e = Expr::Call {
+                    name: format!("__{which}_with"),
+                    args: vec![e, r],
+                    named: Vec::new(),
+                    span,
+                };
+                continue;
             }
             if matches!(self.peek_word().as_deref(), Some("contains") | Some("has")) {
                 let span = self.span();
@@ -1906,7 +2328,7 @@ impl Parser {
             if let Expr::Path(p, path_span) = &e {
                 if p.parts.len() == 1
                     && user_callable_name(&p.parts[0])
-                    && self.looks_like_call_suffix()
+                    && (self.looks_like_call_suffix() || self.list_of_negative(&p.parts[0]))
                 {
                     let name = p.parts[0].clone();
                     let call_span = Span {
@@ -1926,7 +2348,10 @@ impl Parser {
                         )
                         .with_help("define with `name: …`, `fn name …`, or `function name …`"));
                     }
-                    let (args, named) = self.parse_call_args_line(CallArgMode::RestOfLine)?;
+                    let prev_list = std::mem::replace(&mut self.list_args, name == "list");
+                    let parsed = self.parse_call_args_line(CallArgMode::RestOfLine);
+                    self.list_args = prev_list;
+                    let (args, named) = parsed?;
                     e = Expr::Call {
                         name,
                         args,
@@ -1949,6 +2374,71 @@ impl Parser {
                     };
                     continue;
                 }
+            }
+            // list transforms: `xs where it is above 2`, `xs each it times 2`,
+            // `people sorted by age descending`, `todos grouped by folder`
+            let word = self.peek_word();
+            match word.as_deref() {
+                Some("where") | Some("each") | Some("sorted") | Some("grouped")
+                    if self.in_where > 0 =>
+                {
+                    break
+                }
+                Some("each") | Some("grouped") if self.tight > 0 => break,
+                Some(w @ ("where" | "each")) => {
+                    let w = w.to_string();
+                    let span = self.span();
+                    self.bump();
+                    self.in_where += 1;
+                    let saved_tight = std::mem::replace(&mut self.tight, 0);
+                    let body = self.parse_or_line();
+                    self.tight = saved_tight;
+                    self.in_where -= 1;
+                    e = Expr::Call {
+                        name: format!("__{w}"),
+                        args: vec![e, body?],
+                        named: Vec::new(),
+                        span,
+                    };
+                    continue;
+                }
+                Some(w @ ("sorted" | "grouped")) => {
+                    let w = w.to_string();
+                    let span = self.span();
+                    self.bump();
+                    let mut field = String::new();
+                    if self.peek_word().as_deref() == Some("by") {
+                        self.bump();
+                        field = self.word()?;
+                    } else if w == "grouped" {
+                        return Err(
+                            self.err_here("`by` and a field name, e.g. `todos grouped by folder`")
+                        );
+                    }
+                    let mut desc = false;
+                    if matches!(
+                        self.peek_word().as_deref(),
+                        Some("descending") | Some("reversed")
+                    ) {
+                        self.bump();
+                        desc = true;
+                    } else if self.peek_word().as_deref() == Some("ascending") {
+                        self.bump();
+                    }
+                    let lit = |v: Literal| Expr::Literal(v, span.clone());
+                    e = Expr::Call {
+                        name: if w == "sorted" {
+                            "__sortby".into()
+                        } else {
+                            "__group".into()
+                        },
+                        args: vec![e, lit(Literal::Text(field)), lit(Literal::Bool(desc))],
+                        named: Vec::new(),
+                        span,
+                    };
+                    continue;
+                }
+                _ => {}
             }
             break;
         }
@@ -1988,7 +2478,7 @@ impl Parser {
                 }
                 continue;
             }
-            if self.peek_word() == Some("with".into()) {
+            if self.peek_word() == Some("with".into()) && !self.list_args {
                 self.bump();
                 while !self.at_physical_line_end() {
                     if matches!(self.peek().kind, TokenKind::Comma) {
@@ -2067,7 +2557,7 @@ impl Parser {
             | TokenKind::String(_)
             | TokenKind::Color(_)
             | TokenKind::Minus => true,
-            TokenKind::Ident(s) => !call_arg_stop_word(s),
+            TokenKind::Ident(s) => !call_arg_stop_word(s) || (self.list_args && s == "with"),
             _ => false,
         }
     }
@@ -2353,6 +2843,170 @@ impl Parser {
             });
         }
         if let Some(w) = self.peek_word() {
+            if w == "with"
+                && matches!(
+                    self.tokens.get(self.pos + 1).map(|t| &t.kind),
+                    Some(TokenKind::Ident(_))
+                )
+            {
+                // record: `with name "Ada", age 36`
+                self.bump();
+                let prev = self.list_item_mode;
+                self.list_item_mode = true;
+                let mut named = Vec::new();
+                loop {
+                    let fspan = self.span();
+                    let fname = self.word()?;
+                    let value = self.parse_add_line()?;
+                    named.push(NamedArg {
+                        name: fname,
+                        value,
+                        span: fspan,
+                    });
+                    if matches!(self.peek().kind, TokenKind::Comma)
+                        && !matches!(self.tokens.get(self.pos + 1).map(|t| &t.kind), Some(TokenKind::Ident(ref w)) if w == "with")
+                    {
+                        self.bump();
+                        continue;
+                    }
+                    break;
+                }
+                self.list_item_mode = prev;
+                return Ok(Expr::Call {
+                    name: "__record".into(),
+                    args: Vec::new(),
+                    named,
+                    span,
+                });
+            }
+            if w == "map"
+                && matches!(
+                    self.tokens.get(self.pos + 1).map(|t| &t.kind),
+                    Some(TokenKind::String(_))
+                        | Some(TokenKind::Int(_))
+                        | Some(TokenKind::Decimal(_))
+                )
+            {
+                // map: `map "tea" to 3, "cake" to 5`
+                self.bump();
+                let prev = self.list_item_mode;
+                self.list_item_mode = true;
+                let mut args = Vec::new();
+                loop {
+                    let key = self.parse_add_line()?;
+                    if self.word()? != "to" {
+                        self.list_item_mode = prev;
+                        return Err(self.err_here(
+                            "`to` between a key and its value, e.g. `map \"tea\" to 3`",
+                        ));
+                    }
+                    let value = self.parse_add_line()?;
+                    args.push(key);
+                    args.push(value);
+                    if matches!(self.peek().kind, TokenKind::Comma) {
+                        self.bump();
+                        continue;
+                    }
+                    break;
+                }
+                self.list_item_mode = prev;
+                return Ok(Expr::Call {
+                    name: "__map".into(),
+                    args,
+                    named: Vec::new(),
+                    span,
+                });
+            }
+            if w == "days" && self.peek_word_at(1).as_deref() == Some("from") {
+                // `days from start to today`
+                self.bump();
+                self.bump();
+                self.expr_stop_word = Some("to".into());
+                let a = self.parse_add_line();
+                self.expr_stop_word = None;
+                let a = a?;
+                if self.word()? != "to" {
+                    return Err(self.err_here("`to` in `days from a to b`"));
+                }
+                let b = self.parse_add_line()?;
+                return Ok(Expr::Call {
+                    name: "__days_between".into(),
+                    args: vec![a, b],
+                    named: Vec::new(),
+                    span,
+                });
+            }
+            if w == "replace" && self.line_has_word("with") && self.line_has_word("in") {
+                // `replace "cat" with "dog" in story`
+                self.bump();
+                self.expr_stop_word = Some("with".into());
+                let from = self.parse_add_line();
+                self.expr_stop_word = None;
+                let from = from?;
+                self.bump(); // with
+                self.expr_stop_word = Some("in".into());
+                let to = self.parse_add_line();
+                self.expr_stop_word = None;
+                let to = to?;
+                if self.word()? != "in" {
+                    return Err(
+                        self.err_here("`in` and the text, e.g. `replace \"a\" with \"b\" in name`")
+                    );
+                }
+                let text = self.parse_tight_list()?;
+                return Ok(Expr::Call {
+                    name: "replace".into(),
+                    args: vec![text, from, to],
+                    named: Vec::new(),
+                    span,
+                });
+            }
+            if matches!(w.as_str(), "first" | "last")
+                && matches!(
+                    self.tokens.get(self.pos + 1).map(|t| &t.kind),
+                    Some(TokenKind::Int(_)) | Some(TokenKind::Ident(_))
+                )
+                && matches!(
+                    self.tokens.get(self.pos + 2).map(|t| &t.kind),
+                    Some(TokenKind::Ident(ref of)) if of == "of"
+                )
+                && self.peek_word_at(1).as_deref() != Some("of")
+            {
+                // `first 3 of xs`, `last 2 of xs`
+                self.bump();
+                let n = self.parse_expr_primary()?;
+                self.bump(); // of
+                let list = self.parse_tight_list()?;
+                return Ok(Expr::Call {
+                    name: if w == "first" {
+                        "take".into()
+                    } else {
+                        "__take_last".into()
+                    },
+                    args: vec![n, list],
+                    named: Vec::new(),
+                    span,
+                });
+            }
+            if matches!(w.as_str(), "items" | "letters")
+                && matches!(self.tokens.get(self.pos + 2).map(|t| &t.kind), Some(TokenKind::Ident(ref to)) if to == "to")
+            {
+                // `items 2 to 4 of xs`, `letters 1 to 3 of name` (positions start at 1)
+                self.bump();
+                let a = self.parse_expr_primary()?;
+                self.bump(); // to
+                let b = self.parse_expr_primary()?;
+                if self.word()? != "of" {
+                    return Err(self.err_here("`of` and a list, e.g. `items 2 to 4 of names`"));
+                }
+                let list = self.parse_tight_list()?;
+                return Ok(Expr::Call {
+                    name: "slice".into(),
+                    args: vec![a, b, list],
+                    named: Vec::new(),
+                    span,
+                });
+            }
             if w == "item"
                 && matches!(
                     self.tokens.get(self.pos + 2).map(|t| &t.kind),
@@ -2363,7 +3017,7 @@ impl Parser {
                 self.bump();
                 let index = self.parse_expr_primary()?;
                 self.bump(); // of
-                let list = self.parse_unary_line()?;
+                let list = self.parse_tight_list()?;
                 return Ok(Expr::Call {
                     name: "item".into(),
                     args: vec![index, list],
@@ -2543,6 +3197,10 @@ impl Parser {
             errors: Vec::new(),
             list_item_mode: false,
             expr_stop_word: None,
+            fn_names: self.fn_names.clone(),
+            in_where: 0,
+            list_args: false,
+            tight: 0,
         };
         let e = sub.parse_expr_until_line().map_err(relocate)?;
         if !sub.at_physical_line_end() {
@@ -2609,6 +3267,13 @@ fn call_arg_stop_word(word: &str) -> bool {
         "of" | "from"
             | "contains"
             | "has"
+            | "where"
+            | "sorted"
+            | "grouped"
+            | "descending"
+            | "ascending"
+            | "starts"
+            | "ends"
             | "say"
             | "print"
             | "set"
@@ -2643,7 +3308,6 @@ fn script_conflicts_with_spec(word: &str) -> bool {
     matches!(
         word,
         "spec"
-            | "enum"
             | "config"
             | "state"
             | "entity"

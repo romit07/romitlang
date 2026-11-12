@@ -259,26 +259,104 @@ impl Lexer {
                 ));
             }
 
+            if c == '"'
+                && self.chars.get(self.pos + 1) == Some(&'"')
+                && self.chars.get(self.pos + 2) == Some(&'"')
+            {
+                // multi-line text: """ … """ (common indentation is removed)
+                for _ in 0..3 {
+                    self.bump();
+                }
+                let mut raw = String::new();
+                let mut closed = false;
+                while self.peek().is_some() {
+                    if self.peek() == Some('"')
+                        && self.chars.get(self.pos + 1) == Some(&'"')
+                        && self.chars.get(self.pos + 2) == Some(&'"')
+                    {
+                        for _ in 0..3 {
+                            self.bump();
+                        }
+                        closed = true;
+                        break;
+                    }
+                    raw.push(self.bump().unwrap());
+                }
+                if !closed {
+                    return Err(brace_err(
+                        file,
+                        &self.source,
+                        line,
+                        col,
+                        "P011",
+                        "multi-line text needs a closing \"\"\"",
+                    ));
+                }
+                tokens.push(Token {
+                    kind: TokenKind::String(dedent_block(&raw)),
+                    line,
+                    column: col,
+                });
+                continue;
+            }
+
             if c == '"' {
                 self.bump();
                 let mut s = String::new();
+                // quotes inside a `{…}` hole belong to the hole: "Hi {name or else "friend"}"
+                let mut depth = 0usize;
+                let mut closed = false;
                 while let Some(ch) = self.peek() {
-                    if ch == '"' {
+                    if ch == '{' {
+                        if self.chars.get(self.pos + 1) == Some(&'{') && depth == 0 {
+                            s.push_str("{{");
+                            self.bump();
+                            self.bump();
+                            continue;
+                        }
+                        depth += 1;
+                    } else if ch == '}' && depth > 0 {
+                        depth -= 1;
+                    }
+                    if ch == '"' && depth == 0 {
                         self.bump();
+                        closed = true;
                         break;
                     }
                     if ch == '\n' {
-                        return Err(brace_err(
-                            file,
-                            &self.source,
-                            line,
-                            col,
-                            "P011",
-                            "unterminated string literal",
-                        ));
+                        break;
+                    }
+                    if ch == '\\' && depth == 0 {
+                        // escapes: \n new line, \t tab, \" quote, \\ backslash
+                        if let Some(&n) = self.chars.get(self.pos + 1) {
+                            let mapped = match n {
+                                'n' => Some('\n'),
+                                't' => Some('\t'),
+                                '"' => Some('"'),
+                                '\\' => Some('\\'),
+                                _ => None,
+                            };
+                            if let Some(m) = mapped {
+                                s.push(m);
+                                self.bump();
+                                self.bump();
+                                continue;
+                            }
+                        }
                     }
                     s.push(ch);
                     self.bump();
+                }
+                if !closed {
+                    return Err(brace_err(
+                        file,
+                        &self.source,
+                        line,
+                        col,
+                        "P011",
+                        "unterminated string literal",
+                    )
+                    .with_help("close the text with `\"` on the same line, or use \"\"\" … \"\"\" for several lines"));
                 }
                 tokens.push(Token {
                     kind: TokenKind::String(s),
@@ -497,4 +575,32 @@ fn brace_err(
         col,
         snippet_at(source, line, col, "here"),
     )
+}
+
+/// Text between """ marks: drop the first and last blank lines and the shared indentation.
+fn dedent_block(raw: &str) -> String {
+    let mut lines: Vec<&str> = raw.split('\n').collect();
+    if lines.first().is_some_and(|l| l.trim().is_empty()) {
+        lines.remove(0);
+    }
+    if lines.last().is_some_and(|l| l.trim().is_empty()) {
+        lines.pop();
+    }
+    let indent = lines
+        .iter()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| l.len() - l.trim_start_matches(' ').len())
+        .min()
+        .unwrap_or(0);
+    lines
+        .iter()
+        .map(|l| {
+            if l.len() >= indent {
+                &l[indent..]
+            } else {
+                l.trim_start()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }

@@ -168,6 +168,10 @@ pub enum Action {
     If(Vec<(Option<Expr>, Vec<Action>)>),
     For(String, Expr, Vec<Action>),
     Animate(Vec<Action>),
+    /// `try` … `if it fails`; the handler sees `error`
+    Try(Vec<Action>, Vec<Action>),
+    /// `fail "message"`
+    Fail(Expr),
     /// Keep the line number for diagnostics.
     At(usize, Box<Action>),
 }

@@ -17,6 +17,7 @@
 | P027 | Call syntax used `:` after the name (`fn`/`function` and `:` are for definitions only) |
 | P028 | Nested call not allowed except as the last argument on the line |
 | P029 | `{` in text without a matching `}` (use `{{` for a literal brace) |
+| P011 | Text not closed on its line (use `"""` … `"""` for several lines) |
 
 ## Type and rules (E1xx, E2xx)
 
@@ -38,6 +39,8 @@
 | E199 | Test expectation failed at runtime |
 | E210 | Type or field error (checker) |
 | E402 | Rule never exercised by tests (coverage) |
+| E120 | `use "file.rmt"` couldn't be read, or names a spec |
+| E901 | `fail "…"` that no `try` caught (the message is yours) |
 
 ## UI framework (U0xx)
 
