@@ -71,21 +71,9 @@ pub fn parse_app(source: &str, file: &str) -> Result<App, Vec<Diagnostic>> {
         name: "App".into(),
         ..Default::default()
     };
-    for l in &tree {
-        match l.toks[0].word() {
-            Some("use") => {}
-            Some("app") => {
-                match l.toks.get(1) {
-                    Some(Tok::Word(n)) | Some(Tok::Str(n)) => app.name = n.clone(),
-                    _ => cx.at(l, 1, "U003", "expected an app name, e.g. `app Todos`", None),
-                }
-                for c in &l.children {
-                    app_item(&mut cx, &mut app, c);
-                }
-            }
-            _ => app_item(&mut cx, &mut app, l),
-        }
-    }
+    let mut seen = std::collections::HashSet::new();
+    seen.insert(std::path::PathBuf::from(file));
+    add_tree(&mut cx, &mut app, &tree, &mut seen);
     if app.screens.is_empty() && cx.diags.is_empty() {
         cx.error(
             "U003",
@@ -99,6 +87,67 @@ pub fn parse_app(source: &str, file: &str) -> Result<App, Vec<Diagnostic>> {
         Ok(app)
     } else {
         Err(cx.diags)
+    }
+}
+
+/// Add one file's top-level lines to the app; `use "other.rmt"` pulls in another file
+/// (views, actions, screens, state), with paths relative to the file that uses it.
+fn add_tree(
+    cx: &mut Ctx,
+    app: &mut App,
+    tree: &[Line],
+    seen: &mut std::collections::HashSet<std::path::PathBuf>,
+) {
+    for l in tree {
+        match l.toks[0].word() {
+            Some("use") if matches!(l.toks.get(1), Some(Tok::Str(_))) => {
+                let Some(Tok::Str(rel)) = l.toks.get(1) else {
+                    continue;
+                };
+                let dir = std::path::Path::new(cx.file)
+                    .parent()
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_default();
+                let path = dir.join(rel);
+                if !seen.insert(path.clone()) {
+                    continue;
+                }
+                let text = match std::fs::read_to_string(&path) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        cx.at(l, 1, "U002", format!("cannot use \"{rel}\": {e}"),
+                            Some("the path is relative to this file; the online playground can't open other files".into()));
+                        continue;
+                    }
+                };
+                let shown = path.to_string_lossy().to_string();
+                let mut sub = Ctx {
+                    file: &shown,
+                    source: &text,
+                    diags: Vec::new(),
+                };
+                match lex_tree(&text) {
+                    Ok(t) => add_tree(&mut sub, app, &t, seen),
+                    Err(e) => sub.error(e.code, e.message, e.line, e.column, e.help),
+                }
+                cx.diags.append(&mut sub.diags);
+            }
+            Some("use") => {}
+            Some("app") => {
+                match l.toks.get(1) {
+                    Some(Tok::Word(n)) | Some(Tok::Str(n)) => app.name = n.clone(),
+                    _ => cx.at(l, 1, "U003", "expected an app name, e.g. `app Todos`", None),
+                }
+                for c in &l.children {
+                    if c.toks[0].word() == Some("use") {
+                        add_tree(cx, app, std::slice::from_ref(c), seen);
+                    } else {
+                        app_item(cx, app, c);
+                    }
+                }
+            }
+            _ => app_item(cx, app, l),
+        }
     }
 }
 
@@ -237,6 +286,68 @@ fn app_item(cx: &mut Ctx, app: &mut App, l: &Line) {
             if let Some(ev) = parse_event(cx, l) {
                 app.events.push(ev);
             }
+        }
+        "enum" => {
+            // enum Size small, medium, large — values are text constants, `Size` lists them
+            let Some(Tok::Word(name)) = l.toks.get(1) else {
+                cx.at(
+                    l,
+                    1,
+                    "U003",
+                    "expected a name, e.g. `enum Size small, medium, large`",
+                    None,
+                );
+                return;
+            };
+            let mut values = Vec::new();
+            for (i, t) in l.toks.iter().enumerate().skip(2) {
+                match t {
+                    Tok::Sym(",") => {}
+                    Tok::Word(v) => {
+                        if let Some(why) = bad_value_name(v) {
+                            cx.at(
+                                l,
+                                i,
+                                "U110",
+                                format!("`{v}` can't be an enum value: {why}"),
+                                None,
+                            );
+                            continue;
+                        }
+                        values.push(v.clone());
+                    }
+                    other => cx.at(
+                        l,
+                        i,
+                        "U003",
+                        format!("expected a value name, found {}", other.describe()),
+                        None,
+                    ),
+                }
+            }
+            if values.is_empty() {
+                cx.at(
+                    l,
+                    1,
+                    "U003",
+                    "list the values, e.g. `enum Size small, medium, large`",
+                    None,
+                );
+                return;
+            }
+            let text = |v: &str| Expr::Text(vec![super::expr::TextPart::Lit(v.to_string())]);
+            for v in &values {
+                app.computed.push(Computed {
+                    name: v.clone(),
+                    value: text(v),
+                    line: l.line_no,
+                });
+            }
+            app.computed.push(Computed {
+                name: name.clone(),
+                value: Expr::List(values.iter().map(|v| text(v)).collect()),
+                line: l.line_no,
+            });
         }
         "document" => {
             // document notes, title [named "Notes.json"]
@@ -653,6 +764,121 @@ fn parse_screen(cx: &mut Ctx, l: &Line) -> Option<Screen> {
     Some(s)
 }
 
+/// Arms of `match subject` (Kotlin's `when`): `"S"`, `"M", "L"`, `above 10`, `otherwise`.
+/// Returns (condition, arm line) pairs; `None` is the `otherwise` arm.
+fn match_arms<'l>(cx: &mut Ctx, l: &'l Line) -> Option<Vec<(Option<Expr>, &'l Line)>> {
+    let subj_toks: Vec<Tok> = l.toks[1..].to_vec();
+    let subject = if subj_toks.is_empty() {
+        None
+    } else {
+        Some(one_expr(cx, l, 1, &never)?)
+    };
+    if l.children.is_empty() {
+        cx.at(
+            l,
+            0,
+            "U106",
+            "`match` needs indented arms",
+            Some("match size\n  \"S\"\n    text \"small\"\n  otherwise\n    text \"other\"".into()),
+        );
+        return None;
+    }
+    let mut arms = Vec::new();
+    for (i, arm) in l.children.iter().enumerate() {
+        let first = arm.toks[0].word().unwrap_or("");
+        if first == "otherwise" || first == "else" {
+            if i != l.children.len() - 1 {
+                cx.at(
+                    arm,
+                    0,
+                    "P024",
+                    "`otherwise` must be the last arm of a `match`",
+                    None,
+                );
+                return None;
+            }
+            arms.push((None, arm));
+            continue;
+        }
+        let cond = match &subject {
+            None => one_expr(cx, arm, 0, &never)?,
+            Some(subject) => {
+                let comparator = matches!(
+                    first,
+                    "is" | "isnt" | "above" | "below" | "contains" | "has" | "in"
+                ) || matches!(
+                    arm.toks[0],
+                    Tok::Sym("<")
+                        | Tok::Sym(">")
+                        | Tok::Sym("<=")
+                        | Tok::Sym(">=")
+                        | Tok::Sym("==")
+                        | Tok::Sym("!=")
+                );
+                if comparator {
+                    // `above 30` means `<subject> above 30`
+                    let mut toks = subj_toks.clone();
+                    toks.extend(arm.toks.iter().cloned());
+                    let shifted = Line {
+                        indent: arm.indent,
+                        line_no: arm.line_no,
+                        cols: vec![arm.cols[0]; toks.len()],
+                        toks,
+                        children: Vec::new(),
+                    };
+                    one_expr(cx, &shifted, 0, &never)?
+                } else {
+                    let mut p = ExprParser::new(&arm.toks, 0, &never, arm.line_no);
+                    let mut cond: Option<Expr> = None;
+                    loop {
+                        let v = match p.parse() {
+                            Ok(v) => v,
+                            Err(e) => {
+                                cx.expr_err(arm, e);
+                                return None;
+                            }
+                        };
+                        let eq =
+                            Expr::Bin(super::expr::Op::Eq, Box::new(subject.clone()), Box::new(v));
+                        cond = Some(match cond {
+                            None => eq,
+                            Some(c) => Expr::Bin(super::expr::Op::Or, Box::new(c), Box::new(eq)),
+                        });
+                        if arm.toks.get(p.pos).is_some_and(|t| t.is_sym(",")) {
+                            p.pos += 1;
+                            continue;
+                        }
+                        break;
+                    }
+                    if p.pos < arm.toks.len() {
+                        cx.at(
+                            arm,
+                            p.pos,
+                            "U106",
+                            format!("unexpected {} in a `match` arm", arm.toks[p.pos].describe()),
+                            None,
+                        );
+                        return None;
+                    }
+                    cond?
+                }
+            }
+        };
+        arms.push((Some(cond), arm));
+    }
+    if arms.first().is_some_and(|a| a.0.is_none()) {
+        cx.at(
+            l,
+            0,
+            "U106",
+            "`match` needs at least one arm before `otherwise`",
+            None,
+        );
+        return None;
+    }
+    Some(arms)
+}
+
 /// Parse sibling view lines (handles `if` / `otherwise` chains).
 pub fn parse_nodes(cx: &mut Ctx, lines: &[Line]) -> Vec<Node> {
     let mut out: Vec<Node> = Vec::new();
@@ -686,6 +912,18 @@ pub fn parse_nodes(cx: &mut Ctx, lines: &[Line]) -> Vec<Node> {
                         "`otherwise` must follow an `if` block at the same indent",
                         None,
                     ),
+                }
+            }
+            "match" | "when" => {
+                if let Some(arms) = match_arms(cx, l) {
+                    let branches = arms
+                        .into_iter()
+                        .map(|(c, arm)| (c, parse_nodes(cx, &arm.children)))
+                        .collect();
+                    out.push(Node::If {
+                        branches,
+                        line: l.line_no,
+                    });
                 }
             }
             "for" => {
@@ -747,14 +985,37 @@ fn parse_for_head(cx: &mut Ctx, l: &Line) -> Option<(String, Expr)> {
     if let Some(to) = l.toks.iter().position(|t| t.word() == Some("to")) {
         if to > start {
             let a_toks = &l.toks[start..to];
-            let b_toks = &l.toks[to + 1..];
+            // `for each n in 10 to 1 by 3`
+            let by = l
+                .toks
+                .iter()
+                .rposition(|t| t.word() == Some("by"))
+                .filter(|&b| b > to);
+            let b_toks = &l.toks[to + 1..by.unwrap_or(l.toks.len())];
+            let step = match by {
+                Some(b) => {
+                    let mut ps = ExprParser::new(&l.toks[b + 1..], 0, &never, l.line_no);
+                    match ps.parse() {
+                        Ok(e) => Some(e),
+                        Err(e) => {
+                            cx.expr_err(l, e);
+                            return None;
+                        }
+                    }
+                }
+                None => None,
+            };
             let mut pa = ExprParser::new(a_toks, 0, &never, l.line_no);
             let mut pb = ExprParser::new(b_toks, 0, &never, l.line_no);
             return match (pa.parse(), pb.parse()) {
-                (Ok(a), Ok(b)) => Some((
-                    var.clone(),
-                    Expr::Of("__range".into(), Box::new(Expr::List(vec![a, b]))),
-                )),
+                (Ok(a), Ok(b)) => {
+                    let mut parts = vec![a, b];
+                    parts.extend(step);
+                    Some((
+                        var.clone(),
+                        Expr::Of("__range".into(), Box::new(Expr::List(parts))),
+                    ))
+                }
                 (Err(e), _) | (_, Err(e)) => {
                     cx.expr_err(l, e);
                     None
@@ -1197,6 +1458,26 @@ pub fn parse_actions(cx: &mut Ctx, lines: &[Line]) -> Vec<Action> {
     let mut out: Vec<Action> = Vec::new();
     for l in lines {
         let head = l.toks[0].word().unwrap_or("");
+        let words: Vec<&str> = l.toks.iter().filter_map(|t| t.word()).collect();
+        if words.len() == 3 && words == ["if", "it", "fails"] {
+            let handler = parse_actions(cx, &l.children);
+            if let Some(Action::At(_, b)) = out.last_mut() {
+                if let Action::Try(_, h) = b.as_mut() {
+                    if h.is_empty() {
+                        *h = handler;
+                        continue;
+                    }
+                }
+            }
+            cx.at(
+                l,
+                0,
+                "P024",
+                "`if it fails` must follow a `try` block at the same indent",
+                None,
+            );
+            continue;
+        }
         if head == "otherwise" || head == "else" {
             let cond = if l.toks.get(1).and_then(|t| t.word()) == Some("if") {
                 one_expr(cx, l, 2, &never)
@@ -1359,7 +1640,16 @@ fn parse_action_inner(cx: &mut Ctx, l: &Line, children: &[Line]) -> Option<Actio
     if !children.is_empty()
         && !matches!(
             head,
-            "if" | "for" | "ask" | "confirm" | "animate" | "repeat" | "otherwise" | "else"
+            "if" | "for"
+                | "ask"
+                | "confirm"
+                | "animate"
+                | "repeat"
+                | "otherwise"
+                | "else"
+                | "match"
+                | "when"
+                | "try"
         )
     {
         cx.at(
@@ -1707,6 +1997,20 @@ fn parse_action_inner(cx: &mut Ctx, l: &Line, children: &[Line]) -> Option<Actio
         "if" => {
             let cond = one_expr(cx, l, 1, &never)?;
             Action::If(vec![(Some(cond), parse_actions(cx, children))])
+        }
+        "try" if l.toks.len() == 1 => Action::Try(parse_actions(cx, children), Vec::new()),
+        "fail" | "throw" if l.toks.len() > 1 => {
+            let (v, i) = rest_expr(cx, l, 1, &never)?;
+            expect_end(cx, l, i);
+            Action::Fail(v)
+        }
+        "match" | "when" => {
+            let arms = match_arms(cx, l)?;
+            Action::If(
+                arms.into_iter()
+                    .map(|(c, arm)| (c, parse_actions(cx, &arm.children)))
+                    .collect(),
+            )
         }
         "for" => {
             let (var, iter) = parse_for_head(cx, l)?;

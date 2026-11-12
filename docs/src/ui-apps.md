@@ -138,6 +138,27 @@ Controls change state through `bind` (SwiftUI's `$binding`):
 
 `bind` also reaches into records: `toggle bind todo.done`.
 
+### Choices and enums
+
+```text
+enum Size small, medium, large
+
+state
+  pick is medium
+
+screen Order
+  picker "Size" bind pick options Size
+  match pick
+    small
+      text "A little one"
+    otherwise
+      text "Good choice"
+```
+
+### Splitting an app into files
+
+`use "components.rmt"` at the top pulls in another file's `view`s, `action`s, screens and state. Paths are relative to the file.
+
 ### Showing things conditionally and in loops
 
 ```text
@@ -203,7 +224,8 @@ Actions:
 | confirmation | `ask "Delete everything?"` with indented actions to run on OK |
 | time | `wait 1 second` |
 | outside world | `open "https://…"`, `copy text`, `share text`, `load "https://api…" into posts`, `say value` (console) |
-| logic | `if … / otherwise`, `for each … in …`, `repeat 3 times`, `run myAction`, `animate` |
+| logic | `if … / otherwise`, `match x` (values, `below 0`, `otherwise`), `for each … in …` (`10 to 1 by 3`), `repeat 3 times`, `run myAction`, `animate` |
+| errors | `try` … `if it fails` (with `error`), `fail "message"` |
 
 ## Screens and navigation
 
@@ -343,6 +365,11 @@ screen Home
 | `item 2 of names` | position (starting at 1) |
 | `price as money`, `as percent`, `as date`, `as time`, `as ago`, `as number` | formatting |
 | `if dark then "Night" else "Day"` | choose a value |
+| `nickname or else "friend"` | a default when something is `nothing` or empty |
+| `todos each title`, `todos grouped by folder` | transform a list, group it into a map |
+| `first 3 of xs`, `last 2 of xs`, `items 2 to 4 of xs` | parts of a list (or text) |
+| `replace "a" with "b" in text`, `name starts with "A"`, `ends with` | text helpers |
+| `days from start to today`, `year of`, `weekday of` | dates |
 | `random 1 to 6`, `now`, `today` | built-ins |
 | `with title "x", done false` | a record |
 

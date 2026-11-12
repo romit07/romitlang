@@ -1,0 +1,32 @@
+# `match` (Kotlin's when), enums, and handling errors with try / if it fails.
+enum Weather sunny, rainy, snowy
+
+for each w in Weather
+  match w
+    sunny
+      say "{w}: sunglasses"
+    rainy, snowy
+      say "{w}: coat"
+
+for each temp in list -5, 12, 30
+  match temp
+    below 0
+      say "{temp}°: freezing"
+    is at most 20
+      say "{temp}°: mild"
+    otherwise
+      say "{temp}°: hot"
+
+fn withdraw balance, amount
+  if amount is above balance
+    fail "not enough money: you have {balance}, asked for {amount}"
+  give balance minus amount
+
+try
+  say withdraw 100, 30
+  say withdraw 100, 250
+if it fails
+  say "Sorry, {error}"
+
+for each n in 10 to 0 by 5
+  say "Countdown {n}"

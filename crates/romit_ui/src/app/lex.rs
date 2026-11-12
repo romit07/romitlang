@@ -95,9 +95,21 @@ pub fn tokenize_line(
             let mut s = String::new();
             i += 1;
             let mut closed = false;
+            // quotes inside a `{…}` hole belong to the hole: "Hi {name or else "friend"}"
+            let mut depth = 0usize;
             while i < chars.len() {
                 let ch = chars[i];
-                if ch == close {
+                if ch == '{' {
+                    if chars.get(i + 1) == Some(&'{') && depth == 0 {
+                        s.push_str("{{");
+                        i += 2;
+                        continue;
+                    }
+                    depth += 1;
+                } else if ch == '}' && depth > 0 {
+                    depth -= 1;
+                }
+                if ch == close && depth == 0 {
                     closed = true;
                     i += 1;
                     break;

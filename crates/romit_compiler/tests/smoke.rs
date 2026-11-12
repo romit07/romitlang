@@ -182,7 +182,8 @@ fn say_and_print_run_same() {
 
 #[test]
 fn script_set_spec_mix_still_e005() {
-    let src = "set x to 1\nenum Color red green";
+    // `enum` is allowed in scripts now; other spec declarations still are not
+    let src = "set x to 1\nstate\n  count int is 0";
     let r = Parser::parse_file("mix2.rmt", src);
     assert!(r.is_err());
     let msgs = romit_compiler::format_diagnostics(&r.unwrap_err());

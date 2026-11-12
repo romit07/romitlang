@@ -134,6 +134,13 @@ impl<'a, 'b> Gen<'a, 'b> {
     }
 
     fn name(&mut self, n: &str) -> String {
+        // Inside `where` / `each`, an item's own field wins over an outer name of the same spelling.
+        if self.where_depth > 0 && n != "it" && n != "index" && self.is_value_name(n) {
+            self.where_depth -= 1;
+            let outer = self.name(n);
+            self.where_depth += 1;
+            return format!("R.pick(it, {}, () => {outer})", js_str(n));
+        }
         if self.local(n) {
             return format!("L_{n}");
         }
@@ -201,6 +208,7 @@ impl<'a, 'b> Gen<'a, 'b> {
                 let (a, b) = (self.expr(a), self.expr(b));
                 match op {
                     Op::Or => format!("(R.truthy({a}) || R.truthy({b}))"),
+                    Op::OrElse => format!("R.orElse({a}, {b})"),
                     Op::And => format!("(R.truthy({a}) && R.truthy({b}))"),
                     Op::Eq => format!("R.eq({a}, {b})"),
                     Op::Ne => format!("!R.eq({a}, {b})"),
@@ -214,6 +222,8 @@ impl<'a, 'b> Gen<'a, 'b> {
                     Op::Div => format!("R.div({a}, {b})"),
                     Op::Mod => format!("R.mod({a}, {b})"),
                     Op::In => format!("R.inn({a}, {b})"),
+                    Op::StartsWith => format!("R.show({a}).startsWith(R.show({b}))"),
+                    Op::EndsWith => format!("R.show({a}).endsWith(R.show({b}))"),
                 }
             }
             Expr::Of(f, b) => format!("R.of({}, {})", js_str(f), self.expr(b)),
@@ -226,6 +236,32 @@ impl<'a, 'b> Gen<'a, 'b> {
                 self.where_depth -= 1;
                 format!("R.where({l}, (L_it) => {{ const it = L_it; return {c}; }})")
             }
+            Expr::Each(list, body) => {
+                let l = self.expr(list);
+                self.where_depth += 1;
+                self.scopes.push("it".into());
+                let b = self.expr(body);
+                self.scopes.pop();
+                self.where_depth -= 1;
+                format!("R.list({l}).map((L_it) => {{ const it = L_it; return {b}; }})")
+            }
+            Expr::Replace(a, b, t) => format!(
+                "R.show({}).split(R.show({})).join(R.show({}))",
+                self.expr(t),
+                self.expr(a),
+                self.expr(b)
+            ),
+            Expr::DaysBetween(a, b) => format!("R.daysBetween({}, {})", self.expr(a), self.expr(b)),
+            Expr::Group(list, field) => format!("R.group({}, {})", self.expr(list), js_str(field)),
+            Expr::Take(n, list, from_end) => {
+                format!("R.take({}, {}, {from_end})", self.expr(n), self.expr(list))
+            }
+            Expr::Slice(a, b, list) => format!(
+                "R.slice({}, {}, {})",
+                self.expr(a),
+                self.expr(b),
+                self.expr(list)
+            ),
             Expr::SortBy(list, field, desc) => format!(
                 "R.sort({}, {}, {})",
                 self.expr(list),
@@ -580,6 +616,22 @@ impl<'a, 'b> Gen<'a, 'b> {
                 self.scopes.pop();
                 self.scopes.pop();
                 let _ = writeln!(out, "{{ let L___index = 0; for (const L_{var} of R.list({it})) {{ L___index++;\n{b}}} }}");
+            }
+            Action::Try(body, handler) => {
+                let mut b = String::new();
+                self.actions(body, &mut b);
+                self.scopes.push("error".into());
+                let mut h = String::new();
+                self.actions(handler, &mut h);
+                self.scopes.pop();
+                let _ = writeln!(
+                    out,
+                    "R.tryDepth++;\ntry {{\n{b}}} catch (__e) {{ const L_error = R.errorText(__e);\n{h}}} finally {{ R.tryDepth--; }}"
+                );
+            }
+            Action::Fail(v) => {
+                let v = self.expr(v);
+                let _ = writeln!(out, "throw R.fail({v});");
             }
             Action::Animate(body) => {
                 out.push_str("R.animate();\n");

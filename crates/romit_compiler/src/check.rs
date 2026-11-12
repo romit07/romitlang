@@ -65,7 +65,7 @@ pub fn check_script(
     if script.items.is_empty() {
         diags.push(Diagnostic::error(
             "E006",
-            "script is empty; add at least one `say`, `print`, `set`, `to` function, or control-flow statement",
+            "script is empty; add at least one `say`, `print`, `x = …`, `fn` function, or control-flow statement",
             file,
             script.span.line,
             script.span.column,
@@ -97,6 +97,16 @@ pub fn check_script(
         }
     }
 
+    // Functions may read values set at the top level (like Kotlin top-level `val`s).
+    let top_level: Vec<String> = script
+        .items
+        .iter()
+        .filter_map(|it| match it {
+            ScriptItem::Stmt(ScriptStmt::Set { name, .. }) => Some(name.clone()),
+            ScriptItem::Stmt(ScriptStmt::SetPath { root, .. }) => Some(root.clone()),
+            _ => None,
+        })
+        .collect();
     let mut scope: Vec<String> = Vec::new();
     for item in &script.items {
         match item {
@@ -130,6 +140,7 @@ pub fn check_script(
                     }
                 }
                 let mut fn_scope: Vec<String> = f.params.iter().map(|p| p.name.clone()).collect();
+                fn_scope.extend(top_level.iter().cloned());
                 check_script_block(
                     &f.body,
                     &mut fn_scope,
@@ -232,7 +243,7 @@ fn check_script_stmt(
                     source,
                     span,
                     "P022",
-                    "`give` is only allowed inside a `to` function body".into(),
+                    "`give` is only allowed inside a function body (`fn name …`)".into(),
                 ));
             }
             check_script_expr(value, scope, fns, file, source, diags);
@@ -286,11 +297,15 @@ fn check_script_stmt(
             var,
             from,
             to,
+            step,
             body,
             span,
         } => {
             check_script_expr(from, scope, fns, file, source, diags);
             check_script_expr(to, scope, fns, file, source, diags);
+            if let Some(st) = step {
+                check_script_expr(st, scope, fns, file, source, diags);
+            }
             let mut loop_scope = scope.clone();
             if loop_scope.contains(var) {
                 diags.push(type_err(
@@ -319,16 +334,108 @@ fn check_script_stmt(
             }
             check_script_block(body, &mut loop_scope, fns, file, source, diags, in_fn);
         }
+        ScriptStmt::SetPath {
+            root,
+            path,
+            value,
+            span,
+        } => {
+            check_script_expr(value, scope, fns, file, source, diags);
+            for seg in path {
+                if let PathSeg::Key(k) = seg {
+                    check_script_expr(k, scope, fns, file, source, diags);
+                }
+            }
+            if !scope.contains(root) {
+                diags.push(
+                    type_err(
+                        file,
+                        source,
+                        span,
+                        "E108",
+                        format!("undefined name `{root}`"),
+                    )
+                    .with_help(format!(
+                        "create it first, e.g. `{root} = with name \"Ada\"`"
+                    )),
+                );
+            }
+        }
+        ScriptStmt::Try { body, handler, .. } => {
+            let mut body_scope = scope.clone();
+            check_script_block(body, &mut body_scope, fns, file, source, diags, in_fn);
+            if let Some(h) = handler {
+                let mut h_scope = scope.clone();
+                h_scope.push("error".into());
+                check_script_block(h, &mut h_scope, fns, file, source, diags, in_fn);
+            }
+        }
+        ScriptStmt::Fail { message, .. } => {
+            check_script_expr(message, scope, fns, file, source, diags);
+        }
         ScriptStmt::Stop { .. } | ScriptStmt::Skip { .. } => {}
     }
 }
 
 /// Functions every script can call without defining them.
 pub const SCRIPT_BUILTINS: &[&str] = &[
-    "list", "count", "size", "length", "first", "last", "item", "sum", "min", "max", "average",
-    "sort", "sorted", "reverse", "reversed", "join", "split", "upper", "lower", "trim", "round",
-    "floor", "ceil", "abs", "sqrt", "number", "text", "random", "range", "unique", "__append",
+    "list",
+    "count",
+    "size",
+    "length",
+    "first",
+    "last",
+    "item",
+    "sum",
+    "min",
+    "max",
+    "average",
+    "sort",
+    "sorted",
+    "reverse",
+    "reversed",
+    "join",
+    "split",
+    "upper",
+    "lower",
+    "trim",
+    "round",
+    "floor",
+    "ceil",
+    "abs",
+    "sqrt",
+    "number",
+    "text",
+    "random",
+    "range",
+    "unique",
+    "__append",
     "__remove",
+    "keys",
+    "values",
+    "replace",
+    "ask",
+    "today",
+    "now",
+    "weekday",
+    "year",
+    "month",
+    "day",
+    "take",
+    "drop",
+    "slice",
+    "__record",
+    "__map",
+    "__or_else",
+    "__nothing",
+    "__where",
+    "__each",
+    "__sortby",
+    "__group",
+    "__take_last",
+    "__starts_with",
+    "__ends_with",
+    "__days_between",
 ];
 
 pub fn is_script_builtin(name: &str) -> bool {
@@ -348,7 +455,7 @@ fn block_must_return(stmts: &[ScriptStmt]) -> BlockFlow {
             return BlockFlow::Unreachable(stmt_span(stmt));
         }
         match stmt {
-            ScriptStmt::Give { .. } => seen_give = true,
+            ScriptStmt::Give { .. } | ScriptStmt::Fail { .. } => seen_give = true,
             ScriptStmt::If {
                 body,
                 elif,
@@ -377,12 +484,12 @@ fn block_must_return(stmts: &[ScriptStmt]) -> BlockFlow {
                 } else {
                     all_return = false;
                 }
+                // An `if` whose every branch gives counts as a give; otherwise
+                // keep checking — a later `give` can still cover this path.
                 if all_return {
-                    return BlockFlow::Ok;
+                    seen_give = true;
                 }
-                if else_body.is_none() && elif.is_empty() {
-                    return BlockFlow::MissingReturn(span.clone());
-                }
+                let _ = span;
             }
             _ => {}
         }
@@ -407,6 +514,9 @@ fn stmt_span(stmt: &ScriptStmt) -> Span {
         | ScriptStmt::Repeat { span, .. }
         | ScriptStmt::ForEachRange { span, .. }
         | ScriptStmt::ForEachList { span, .. }
+        | ScriptStmt::SetPath { span, .. }
+        | ScriptStmt::Try { span, .. }
+        | ScriptStmt::Fail { span, .. }
         | ScriptStmt::Stop { span }
         | ScriptStmt::Skip { span }
         | ScriptStmt::While { span, .. }
@@ -437,7 +547,7 @@ fn check_script_expr(
     match expr {
         Expr::Path(p, span) if p.parts.len() == 1 => {
             let name = &p.parts[0];
-            if matches!(name.as_str(), "true" | "false") {
+            if matches!(name.as_str(), "true" | "false" | "nothing" | "none") {
                 return;
             }
             if fns.contains_key(name) {
@@ -452,19 +562,21 @@ fn check_script_expr(
                 }
                 let mut d = type_err(file, source, span, "E108", msg);
                 d = d.with_help(format!(
-                    "set {name} to <value>, call a `to {name} …` function, or fix the spelling"
+                    "create it first with `{name} = …`, define `fn {name} …`, or check the spelling"
                 ));
                 diags.push(d);
             }
         }
-        Expr::Path(_, span) => {
-            diags.push(type_err(
-                file,
-                source,
-                span,
-                "E108",
-                "scripts use plain variable names; use `set name to value`".into(),
-            ));
+        Expr::Path(p, span) => {
+            // `person.name`: the first word must be a known value
+            let root = Expr::Path(
+                PathExpr {
+                    parts: vec![p.parts[0].clone()],
+                    span: span.clone(),
+                },
+                span.clone(),
+            );
+            check_script_expr(&root, scope, fns, file, source, diags);
         }
         Expr::Binary { left, right, .. } => {
             check_script_expr(left, scope, fns, file, source, diags);
@@ -480,9 +592,26 @@ fn check_script_expr(
             named,
             span,
         } => {
+            if matches!(name.as_str(), "__where" | "__each") && args.len() == 2 {
+                // the body sees `it` and the item's fields by name
+                check_script_expr(&args[0], scope, fns, file, source, diags);
+                let mut inner = scope.to_vec();
+                inner.push("it".into());
+                let mut found = Vec::new();
+                check_script_expr(&args[1], &inner, fns, file, source, &mut found);
+                diags.extend(
+                    found
+                        .into_iter()
+                        .filter(|d| !(d.code == "E108" && d.message.starts_with("undefined name"))),
+                );
+                return;
+            }
             if !fns.contains_key(name) && is_script_builtin(name) {
                 for a in args {
                     check_script_expr(a, scope, fns, file, source, diags);
+                }
+                for n in named {
+                    check_script_expr(&n.value, scope, fns, file, source, diags);
                 }
                 return;
             }
@@ -536,7 +665,16 @@ fn check_script_expr(
             }
             let required = defn.params.iter().filter(|p| p.default.is_none()).count();
             let positional = args.len();
-            if positional < required {
+            // a required parameter can also be given by name: `greet with name "Bo"`
+            let missing = defn
+                .params
+                .iter()
+                .enumerate()
+                .filter(|(i, p)| {
+                    p.default.is_none() && *i >= positional && !bound.contains(&p.name)
+                })
+                .count();
+            if missing > 0 {
                 diags.push(
                     type_err(
                         file,

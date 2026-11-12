@@ -25,23 +25,25 @@ def alt(words):
 
 ELEMENTS = const_list("ELEMENTS")
 MODIFIERS = sorted(set(const_list("MODIFIERS") + re.findall(r'\("([a-z0-9]+)", "[a-z]+"\)', VOCAB)))
-DECL_BLOCKS = ["state", "computed", "derived", "theme", "toolbar", "sidebar", "document", "remember", "data", "template"]
-CONTROL = ["if", "otherwise", "else", "for", "each", "in", "while", "repeat", "times", "give", "stop", "skip", "do", "then", "unless", "when"]
+DECL_BLOCKS = ["state", "computed", "derived", "theme", "toolbar", "sidebar", "document", "remember", "data", "template", "enum"]
+CONTROL = ["if", "otherwise", "else", "for", "each", "in", "while", "repeat", "times", "give", "stop", "skip", "do", "then",
+           "unless", "when", "match", "try", "fail", "fails", "throw"]
 ACTIONS = ["say", "print", "set", "toggle", "flip", "increase", "decrease", "add", "append", "insert", "remove", "delete",
            "clear", "reset", "sort", "shuffle", "go", "back", "home", "show", "present", "cover", "popover", "inspector",
            "close", "alert", "ask", "confirm", "toast", "notify", "wait", "open", "visit", "copy", "share", "load", "fetch",
-           "into", "save", "export", "import", "vibrate", "run", "call", "animate", "window", "file"]
+           "into", "save", "export", "import", "vibrate", "run", "call", "animate", "window", "file", "ask"]
 OP_WORDS = ["is", "isnt", "not", "and", "or", "plus", "minus", "times", "divided", "by", "remainder", "mod", "above",
             "below", "at", "least", "most", "more", "less", "than", "contains", "has", "where", "sorted", "descending",
             "ascending", "as", "of", "with", "to", "from", "bind", "options", "step", "suggest", "scopes", "scope",
             "message", "footer", "header", "icon", "placeholder", "named", "titled", "subtitle", "inline", "settings",
-            "tab", "locked", "equals", "empty", "list", "random", "item"]
+            "tab", "locked", "equals", "empty", "list", "random", "item", "items", "letters", "grouped", "starts",
+            "ends", "replace", "map", "first", "last", "days"]
 SPEC = ["spec", "version", "about", "enum", "config", "entity", "keyed", "event", "stores", "output", "define",
         "returns", "machine", "rule", "emit", "reject", "invariant", "limit", "per", "test", "given", "send", "expect",
         "emitted", "rejected", "final", "all", "any", "count", "sum", "min", "max"]
 EVENTS = ["tap", "click", "press", "double", "long", "hover", "appear", "start", "load", "disappear", "change", "submit",
           "enter", "delete", "swipe", "background", "foreground", "active", "url"]
-CONSTS = ["true", "false", "yes", "no", "nothing", "none", "now", "today", "index", "it", "url"]
+CONSTS = ["true", "false", "yes", "no", "nothing", "none", "now", "today", "index", "it", "url", "error"]
 
 NUMBER = {"name": "constant.numeric.romit", "match": r"\b\d[\d_]*(?:\.\d+)?\b"}
 MEMBER = {"match": r"(\.)([A-Za-z_]\w*)",
@@ -99,6 +101,10 @@ grammar = {
             {"name": "variable.other.romit", "match": r"\b[a-z_]\w*\b"},
         ]},
         "strings": {"patterns": [
+            {"name": "string.quoted.triple.romit", "begin": "\"\"\"", "end": "\"\"\"",
+             "beginCaptures": {"0": {"name": "punctuation.definition.string.begin.romit"}},
+             "endCaptures": {"0": {"name": "punctuation.definition.string.end.romit"}},
+             "patterns": [{"include": "#string-content"}]},
             {"name": "string.quoted.double.romit", "begin": "\"", "end": "\"",
              "beginCaptures": {"0": {"name": "punctuation.definition.string.begin.romit"}},
              "endCaptures": {"0": {"name": "punctuation.definition.string.end.romit"}},
@@ -115,6 +121,7 @@ grammar = {
              "patterns": [{"include": "#interp-expression"}]},
         ]},
         "interp-expression": {"patterns": [
+            {"include": "#strings"},
             NUMBER,
             {"name": "keyword.operator.word.romit", "match": r"\b(%s)\b" % alt(OP_WORDS + CONTROL)},
             {"name": "constant.language.romit", "match": r"\b(%s)\b" % alt(CONSTS)},
@@ -124,6 +131,17 @@ grammar = {
         ]},
     },
 }
+
+# Words for autocomplete, by kind (read by extension.js).
+completions = {
+    "element": sorted(set(ELEMENTS)),
+    "modifier": sorted(set(MODIFIERS)),
+    "action": sorted(set(ACTIONS) - {"into", "window", "file"}),
+    "keyword": sorted(set(DECL_BLOCKS + CONTROL + ["app", "screen", "view", "use", "enum", "match", "try", "fail", "ask", "fn", "action", "computed", "state"])),
+    "operator": sorted(set(OP_WORDS)),
+    "constant": sorted(set(CONSTS)),
+}
+(HERE / "completions.json").write_text(json.dumps(completions, indent=1) + "\n")
 
 out = HERE / "syntaxes" / "romit.tmLanguage.json"
 out.write_text(json.dumps(grammar, indent=2, ensure_ascii=False) + "\n")

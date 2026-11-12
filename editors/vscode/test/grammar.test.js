@@ -87,6 +87,14 @@ async function main() {
   expect('say "Hi {name}!"', "{", "punctuation.section.interpolation.begin");
   expect('say "{count of todos} left"', "of", "keyword.operator.word");
   expect('say "{{literal}}"', "{{", "constant.character.escape");
+  // newer syntax
+  expect("    match size", "match", "keyword.control");
+  expect("try", "try", "keyword.control");
+  expect("  fail \"boom\"", "fail", "keyword.control");
+  expect('say "Hi {name or else "friend"}"', "friend", "string.quoted");
+  expect('say "Hi {name or else "friend"}"', "else", "keyword");
+  expect('poem = """', '"""', "string.quoted.triple");
+  expect("enum Size small, medium", "enum", "storage.type");
   // comments
   expect("# a comment", "# a comment", "comment.line.number-sign");
   expect("note A to-do app", "note A to-do app", "comment.line.note");

@@ -2,6 +2,31 @@
 
 All notable changes to Romit. Versions follow [semantic versioning](https://semver.org/). While Romit is 0.x, a new middle number means new features.
 
+## Unreleased
+
+### Language (from the Kotlin comparison)
+
+- **Records and maps** in scripts: `with name "Ada", age 36`, `ada.age += 1`, `map "tea" to 3`, `item "tea" of prices`, `keys of`, `values of`.
+- **`nothing` and `or else`** (Kotlin's `null` and `?:`), in scripts and apps.
+- **`match`** (Kotlin's `when`): value arms, comparison arms (`below 0`), and a no-subject form, in scripts, app actions and app views.
+- **Errors**: `fail "message"`, `try` … `if it fails` with `error`, in scripts and apps (it also catches failed `load`s).
+- **List transforms**: `where`, `each`, `sorted by … descending`, `grouped by`, `first 3 of`, `last 2 of`, `items 2 to 4 of`, in scripts and apps.
+- **Text**: `replace "a" with "b" in text`, `starts with`, `ends with`, `letters 1 to 3 of`, escapes (`\n`, `\t`, `\"`), `"""` multi-line text, and quotes inside `{…}`.
+- **`ask "Question?"`** reads input in scripts. Output streams as the script runs; the playground has an input box.
+- **`use "file.rmt"`** splits scripts and apps across files. Functions can read top-level values.
+- **`enum Size small, medium, large`** in scripts and apps.
+- **Dates**: `today`, `now`, `year/month/day/weekday of`, `days from a to b`.
+- **Loops** count down (`10 to 1`) and take steps (`by 3`).
+- Fixed: a function with `if … give` followed by another `give` was wrongly rejected (E113).
+- Fixed: a required parameter passed by name (`greet with name "Bo"`) was reported as missing.
+- Fixed: `list -5, 3` and `check -2` were read as subtraction.
+
+### Tools
+
+- `romit check --json [--stdin]` for editors.
+- VS Code extension: errors as you type, autocomplete, and a run/preview command.
+- Docs: [Records, match, and errors](https://romitlang.org/language/records-match-errors.html), [Kotlin → Romit](https://romitlang.org/reference/kotlin-map.html).
+
 ## v0.1.0: Apps for iPhone and Android
 
 The first release that builds apps. Write a screen the way you'd describe it, and Romit turns it into a reactive app that looks native on every device.

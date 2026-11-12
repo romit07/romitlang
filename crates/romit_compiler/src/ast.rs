@@ -18,8 +18,13 @@ pub enum Program {
 pub struct Script {
     pub items: Vec<ScriptItem>,
     pub span: Span,
+    /// `use "helpers.rmt"` lines: other files whose functions this script uses
+    pub uses: Vec<(String, Span)>,
 }
 
+// Statements are much bigger than function headers; boxing every statement isn't worth it
+// for a syntax tree this small.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScriptItem {
     Fn(ScriptFn),
@@ -84,6 +89,8 @@ pub enum ScriptStmt {
         var: String,
         from: Expr,
         to: Expr,
+        /// `by 2`
+        step: Option<Expr>,
         body: Vec<ScriptStmt>,
         span: Span,
     },
@@ -99,6 +106,24 @@ pub enum ScriptStmt {
         body: Vec<ScriptStmt>,
         span: Span,
     },
+    /// `p.name = v`, `set item "green tea" of prices to 4`
+    SetPath {
+        root: String,
+        path: Vec<PathSeg>,
+        value: Expr,
+        span: Span,
+    },
+    /// `try` … `if it fails` (Kotlin's try/catch). `error` holds the message.
+    Try {
+        body: Vec<ScriptStmt>,
+        handler: Option<Vec<ScriptStmt>>,
+        span: Span,
+    },
+    /// `fail "message"` (Kotlin's throw)
+    Fail {
+        message: Expr,
+        span: Span,
+    },
     /// `stop` — leave the innermost loop.
     Stop {
         span: Span,
@@ -111,6 +136,13 @@ pub enum ScriptStmt {
         value: Expr,
         span: Span,
     },
+}
+
+/// One step into a record: `.name` or `item "key" of`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PathSeg {
+    Field(String),
+    Key(Expr),
 }
 
 #[derive(Debug, Clone, PartialEq)]

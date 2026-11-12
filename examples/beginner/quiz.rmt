@@ -1,0 +1,12 @@
+# A tiny quiz that asks questions (romit run quiz.rmt).
+# In the playground, type answers into "Input for ask", one per line.
+name = ask "What's your name?"
+answer = ask "What is 6 times 7?"
+
+match answer
+  42
+    say "Correct, {name or else "friend"}!"
+  nothing
+    say "No answer given."
+  otherwise
+    say "Not quite, {name}: it's 42."

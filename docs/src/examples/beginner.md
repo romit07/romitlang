@@ -5,6 +5,18 @@ These programs live in the repository under `examples/beginner/`.
 - Scripts: `romit run examples/beginner/hello.rmt`
 - Specs with tests: `romit test examples/beginner/<name>.rmt`
 
+## records.rmt
+
+Records, maps, and list transforms: `with name "Ada", age 36`, `where`, `each`, `sorted by`, `grouped by`, `map "tea" to 3`, `or else`.
+
+## match_and_errors.rmt
+
+`enum`, `match` with values and comparisons, `fail` with `try` / `if it fails`, and counting down `by` a step.
+
+## quiz.rmt
+
+`ask` for input: `romit run examples/beginner/quiz.rmt`, or type answers into **Input for ask** in the playground.
+
 ## lists.rmt
 
 ```text

@@ -17,6 +17,9 @@ app Counter
 
 ## Features
 
+- **Errors as you type**: the same checks as `romit check`, underlined in the editor with the fix-it hint ("did you mean `button`?"). Needs the `romit` program ([install](https://romitlang.org/install.html)); set `romit.path` if it isn't on your PATH.
+- **Autocomplete** for elements, modifiers, actions and keywords.
+- **Run or preview** the current file with the ▶ button or ⌘⌥R / Ctrl+Alt+R: scripts run in the terminal, and apps open a live preview.
 - **Highlighting** for `.rmt` files: keywords, UI elements, modifiers, actions, `"text with {holes}"`, numbers, colors, and `#` / `note` comments. Brackets outside text are marked as errors, as they are in Romit.
 - **Romit-friendly settings**: 2-space indentation and spaces only (tabs are a compile error in Romit), comment toggling with ⌘/ / Ctrl+/, auto-closing quotes, and indentation-based folding.
 - **Snippets**: `app`, `screen`, `screenwith`, `state`, `computed`, `button`, `buttonon`, `list`, `foreach`, `if`, `field`, `toggle`, `picker`, `tabs`, `sidebar`, `action`, `fn`, `spec`.

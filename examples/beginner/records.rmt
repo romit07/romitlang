@@ -1,0 +1,23 @@
+# Records, maps, and list transforms (like Kotlin data classes, maps, filter/map/groupBy).
+people = list with name "Ada", age 36, team "engine", with name "Alan", age 41, team "codes", with name "Grace", age 30, team "engine"
+
+say "Everyone: {join people each name, ", "}"
+say "Over 32: {join people where age is above 32 each name, ", "}"
+say "Oldest: {first 1 of people sorted by age descending each name}"
+
+teams = people grouped by team
+for each team in keys of teams
+  say "{team}: {count of item team of teams} people"
+
+ada = item 1 of people
+ada.age += 1
+say "{ada.name} is now {ada.age}"
+
+prices = map "tea" to 3, "cake" to 4.5
+set item "coffee" of prices to 3.5
+for each thing in keys of prices
+  say "{thing}: {item thing of prices}"
+say "Total: {sum of values of prices}"
+
+nickname = nothing
+say "Hello, {nickname or else ada.name}"

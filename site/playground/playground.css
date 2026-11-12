@@ -108,3 +108,26 @@
 .pg-preview[hidden] {
   display: none;
 }
+
+.pg-input {
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.pg-input summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.pg-input textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--code-bg);
+  color: var(--text);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.85rem;
+}

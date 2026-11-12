@@ -19,6 +19,18 @@ pub enum Expr {
     Of(String, Box<Expr>),
     /// `todos where done`
     Where(Box<Expr>, Box<Expr>),
+    /// `todos each title` (Kotlin's map)
+    Each(Box<Expr>, Box<Expr>),
+    /// `todos grouped by folder`
+    Group(Box<Expr>, String),
+    /// `first 3 of xs` / `last 3 of xs` (bool: from the end)
+    Take(Box<Expr>, Box<Expr>, bool),
+    /// `items 2 to 4 of xs`
+    Slice(Box<Expr>, Box<Expr>, Box<Expr>),
+    /// `replace "a" with "b" in text`
+    Replace(Box<Expr>, Box<Expr>, Box<Expr>),
+    /// `days from a to b`
+    DaysBetween(Box<Expr>, Box<Expr>),
     /// `todos sorted by title`, `names sorted`
     SortBy(Box<Expr>, Option<String>, bool),
     /// `price as money`
@@ -42,6 +54,8 @@ pub enum TextPart {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Op {
     Or,
+    /// `name or else "friend"`
+    OrElse,
     And,
     Eq,
     Ne,
@@ -55,6 +69,8 @@ pub enum Op {
     Div,
     Mod,
     In,
+    StartsWith,
+    EndsWith,
 }
 
 pub const OF_FUNCS: &[&str] = &[
@@ -88,6 +104,12 @@ pub const OF_FUNCS: &[&str] = &[
     "lines",
     "shuffled",
     "keys",
+    "values",
+    "year",
+    "month",
+    "day",
+    "weekday",
+    "join",
 ];
 
 pub const AS_FORMATS: &[&str] = &[
@@ -143,6 +165,7 @@ pub fn is_reserved_word(w: &str) -> bool {
                 | "do"
                 | "to"
                 | "by"
+                | "replace"
                 | "each"
                 | "for"
                 | "on"
@@ -168,6 +191,8 @@ pub struct ExprParser<'a> {
     pub comma_stops: bool,
     /// Inside a `where` condition: a later `where` / `sorted` belongs to the outer list.
     in_where: usize,
+    /// The list in `first 3 of …`: filters belong to it, `each` / `grouped by` don't.
+    tight: usize,
 }
 
 type R<T> = Result<T, ExprError>;
@@ -186,6 +211,7 @@ impl<'a> ExprParser<'a> {
             line_no,
             comma_stops: true,
             in_where: 0,
+            tight: 0,
         }
     }
 
@@ -257,8 +283,13 @@ impl<'a> ExprParser<'a> {
         let mut e = self.parse_and()?;
         while self.peek_word() == Some("or") {
             self.pos += 1;
+            let op = if self.eat_word("else") {
+                Op::OrElse
+            } else {
+                Op::Or
+            };
             let r = self.parse_and()?;
-            e = Expr::Bin(Op::Or, Box::new(e), Box::new(r));
+            e = Expr::Bin(op, Box::new(e), Box::new(r));
         }
         Ok(e)
     }
@@ -344,6 +375,20 @@ impl<'a> ExprParser<'a> {
                 Some(Tok::Word(w)) if w == "equals" => Op::Eq,
                 Some(Tok::Word(w)) if w == "above" => Op::Gt,
                 Some(Tok::Word(w)) if w == "below" => Op::Lt,
+                Some(Tok::Word(w))
+                    if (w == "starts" || w == "ends")
+                        && self.peek_at(1).and_then(|t| t.word()) == Some("with") =>
+                {
+                    let op = if w == "starts" {
+                        Op::StartsWith
+                    } else {
+                        Op::EndsWith
+                    };
+                    self.pos += 2;
+                    let r = self.parse_add()?;
+                    e = Expr::Bin(op, Box::new(e), Box::new(r));
+                    continue;
+                }
                 Some(Tok::Word(w)) if w == "contains" || w == "has" => {
                     self.pos += 1;
                     let r = self.parse_add()?;
@@ -443,13 +488,39 @@ impl<'a> ExprParser<'a> {
                 return self.err("expected a field name after `.`");
             }
             match self.peek_word() {
-                Some("where") | Some("sorted") if self.in_where > 0 => break,
-                Some("where") => {
+                Some("where") | Some("sorted") | Some("each") | Some("grouped")
+                    if self.in_where > 0 =>
+                {
+                    break
+                }
+                Some("each") | Some("grouped") if self.tight > 0 => break,
+                Some(w @ ("where" | "each")) => {
+                    let is_where = w == "where";
                     self.pos += 1;
                     self.in_where += 1;
+                    let saved_tight = std::mem::replace(&mut self.tight, 0);
                     let cond = self.parse_or();
+                    self.tight = saved_tight;
                     self.in_where -= 1;
-                    e = Expr::Where(Box::new(e), Box::new(cond?));
+                    e = if is_where {
+                        Expr::Where(Box::new(e), Box::new(cond?))
+                    } else {
+                        Expr::Each(Box::new(e), Box::new(cond?))
+                    };
+                }
+                Some("grouped") => {
+                    self.pos += 1;
+                    if !self.eat_word("by") {
+                        return self.err("expected `by` in `todos grouped by folder`");
+                    }
+                    match self.peek() {
+                        Some(Tok::Word(f)) => {
+                            let f = f.clone();
+                            self.pos += 1;
+                            e = Expr::Group(Box::new(e), f);
+                        }
+                        _ => return self.err("expected a field name after `grouped by`"),
+                    }
                 }
                 Some("sorted") => {
                     self.pos += 1;
@@ -587,6 +658,55 @@ impl<'a> ExprParser<'a> {
                         let b = self.parse_add()?;
                         Ok(Expr::Random(Box::new(a), Box::new(b)))
                     }
+                    "first" | "last"
+                        if self.peek_at(1).and_then(|t| t.word()) != Some("of")
+                            && self.peek_at(2).and_then(|t| t.word()) == Some("of") =>
+                    {
+                        let from_end = w == "last";
+                        self.pos += 1;
+                        let n = self.parse_primary()?;
+                        self.pos += 1;
+                        self.tight += 1;
+                        let list = self.parse_unary();
+                        self.tight -= 1;
+                        Ok(Expr::Take(Box::new(n), Box::new(list?), from_end))
+                    }
+                    "items" | "letters" if self.peek_at(2).and_then(|t| t.word()) == Some("to") => {
+                        self.pos += 1;
+                        let a = self.parse_primary()?;
+                        self.pos += 1;
+                        let b = self.parse_primary()?;
+                        if !self.eat_word("of") {
+                            return self.err("expected `of` in `items 2 to 4 of names`");
+                        }
+                        self.tight += 1;
+                        let list = self.parse_unary();
+                        self.tight -= 1;
+                        Ok(Expr::Slice(Box::new(a), Box::new(b), Box::new(list?)))
+                    }
+                    "replace" => {
+                        self.pos += 1;
+                        let from = self.parse_add()?;
+                        if !self.eat_word("with") {
+                            return self
+                                .err("expected `with` in `replace \"a\" with \"b\" in text`");
+                        }
+                        let to = self.parse_add()?;
+                        if !self.eat_word("in") {
+                            return self.err("expected `in` in `replace \"a\" with \"b\" in text`");
+                        }
+                        let text = self.parse_unary()?;
+                        Ok(Expr::Replace(Box::new(from), Box::new(to), Box::new(text)))
+                    }
+                    "days" if self.peek_at(1).and_then(|t| t.word()) == Some("from") => {
+                        self.pos += 2;
+                        let a = self.parse_add()?;
+                        if !self.eat_word("to") {
+                            return self.err("expected `to` in `days from a to b`");
+                        }
+                        let b = self.parse_add()?;
+                        Ok(Expr::DaysBetween(Box::new(a), Box::new(b)))
+                    }
                     "item" if self.peek_at(2).and_then(|t| t.word()) == Some("of") => {
                         self.pos += 1;
                         let idx = self.parse_primary()?;
@@ -713,9 +833,28 @@ pub fn walk_names<'e>(e: &'e Expr, f: &mut dyn FnMut(&'e str, bool)) {
                 go(a, inside_where, f);
                 go(b, inside_where, f);
             }
-            Expr::Where(a, b) => {
+            Expr::Where(a, b) | Expr::Each(a, b) => {
                 go(a, inside_where, f);
                 go(b, true, f);
+            }
+            Expr::Group(a, _) => go(a, inside_where, f),
+            Expr::Take(a, b, _) => {
+                go(a, inside_where, f);
+                go(b, inside_where, f);
+            }
+            Expr::Replace(a, b, c) => {
+                go(a, inside_where, f);
+                go(b, inside_where, f);
+                go(c, inside_where, f);
+            }
+            Expr::DaysBetween(a, b) => {
+                go(a, inside_where, f);
+                go(b, inside_where, f);
+            }
+            Expr::Slice(a, b, c) => {
+                go(a, inside_where, f);
+                go(b, inside_where, f);
+                go(c, inside_where, f);
             }
             Expr::If(a, b, c) => {
                 go(a, inside_where, f);

@@ -86,7 +86,7 @@
           }
         },
         {
-          "match": "^\\s*(computed|document|remember|template|derived|sidebar|toolbar|state|theme|data)\\b",
+          "match": "^\\s*(computed|document|remember|template|derived|sidebar|toolbar|state|theme|data|enum)\\b",
           "captures": {
             "1": {
               "name": "storage.type.romit"
@@ -184,15 +184,15 @@
         },
         {
           "name": "keyword.control.romit",
-          "match": "\\b(otherwise|repeat|unless|times|while|each|else|give|skip|stop|then|when|for|do|if|in)\\b"
+          "match": "\\b(otherwise|repeat|unless|fails|match|throw|times|while|each|else|fail|give|skip|stop|then|when|for|try|do|if|in)\\b"
         },
         {
           "name": "constant.language.romit",
-          "match": "\\b(nothing|false|index|today|none|true|now|url|yes|it|no)\\b"
+          "match": "\\b(nothing|error|false|index|today|none|true|now|url|yes|it|no)\\b"
         },
         {
           "name": "keyword.operator.word.romit",
-          "match": "\\b(placeholder|descending|ascending|remainder|contains|settings|subtitle|divided|message|options|suggest|equals|footer|header|inline|locked|random|scopes|sorted|titled|above|below|empty|least|minus|named|scope|times|where|bind|from|icon|isnt|item|less|list|more|most|plus|step|than|with|and|has|mod|not|tab|as|at|by|is|of|or|to)\\b"
+          "match": "\\b(placeholder|descending|ascending|remainder|contains|settings|subtitle|divided|grouped|letters|message|options|replace|suggest|equals|footer|header|inline|locked|random|scopes|sorted|starts|titled|above|below|empty|first|items|least|minus|named|scope|times|where|bind|days|ends|from|icon|isnt|item|last|less|list|more|most|plus|step|than|with|and|has|map|mod|not|tab|as|at|by|is|of|or|to)\\b"
         },
         {
           "name": "support.function.modifier.romit",
@@ -233,6 +233,26 @@
     },
     "strings": {
       "patterns": [
+        {
+          "name": "string.quoted.triple.romit",
+          "begin": "\"\"\"",
+          "end": "\"\"\"",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.romit"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.romit"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#string-content"
+            }
+          ]
+        },
         {
           "name": "string.quoted.double.romit",
           "begin": "\"",
@@ -297,16 +317,19 @@
     "interp-expression": {
       "patterns": [
         {
+          "include": "#strings"
+        },
+        {
           "name": "constant.numeric.romit",
           "match": "\\b\\d[\\d_]*(?:\\.\\d+)?\\b"
         },
         {
           "name": "keyword.operator.word.romit",
-          "match": "\\b(placeholder|descending|ascending|otherwise|remainder|contains|settings|subtitle|divided|message|options|suggest|equals|footer|header|inline|locked|random|repeat|scopes|sorted|titled|unless|above|below|empty|least|minus|named|scope|times|where|while|bind|each|else|from|give|icon|isnt|item|less|list|more|most|plus|skip|step|stop|than|then|when|with|and|for|has|mod|not|tab|as|at|by|do|if|in|is|of|or|to)\\b"
+          "match": "\\b(placeholder|descending|ascending|otherwise|remainder|contains|settings|subtitle|divided|grouped|letters|message|options|replace|suggest|equals|footer|header|inline|locked|random|repeat|scopes|sorted|starts|titled|unless|above|below|empty|fails|first|items|least|match|minus|named|scope|throw|times|where|while|bind|days|each|else|ends|fail|from|give|icon|isnt|item|last|less|list|more|most|plus|skip|step|stop|than|then|when|with|and|for|has|map|mod|not|tab|try|as|at|by|do|if|in|is|of|or|to)\\b"
         },
         {
           "name": "constant.language.romit",
-          "match": "\\b(nothing|false|index|today|none|true|now|url|yes|it|no)\\b"
+          "match": "\\b(nothing|error|false|index|today|none|true|now|url|yes|it|no)\\b"
         },
         {
           "match": "(\\.)([A-Za-z_]\\w*)",
