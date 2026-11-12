@@ -8,7 +8,7 @@ The Romit extension adds syntax highlighting, snippets, a file icon, and Romit's
 2. Install it:
 
    ```bash
-   code --install-extension romit-0.1.0.vsix
+   code --install-extension romit-0.2.0.vsix
    ```
 
    In Cursor use `cursor --install-extension …`. You can also use the Extensions view: **⋯** → **Install from VSIX…**.

@@ -2,7 +2,7 @@
   "name": "romit",
   "displayName": "Romit",
   "description": "Syntax highlighting, errors as you type, autocomplete, snippets, and run/preview for the Romit language (.rmt): write apps the way you write prompts.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "romitlang",
   "license": "MIT",
   "icon": "images/icon.png",
