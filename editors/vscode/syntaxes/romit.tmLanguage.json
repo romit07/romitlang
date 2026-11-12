@@ -1,0 +1,333 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Romit",
+  "scopeName": "source.romit",
+  "fileTypes": [
+    "rmt"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#declarations"
+    },
+    {
+      "include": "#line-start"
+    },
+    {
+      "include": "#expression"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.note.romit",
+          "match": "^\\s*note(\\s.*)?$"
+        },
+        {
+          "name": "comment.line.number-sign.romit",
+          "match": "(?<![\\w#\\\"])#(?=\\s|#|$).*$"
+        },
+        {
+          "name": "comment.line.double-slash.romit",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "^\\s*(use)\\s+(ui|template)\\b(?:\\s+(\\w+))?",
+          "captures": {
+            "1": {
+              "name": "keyword.control.import.romit"
+            },
+            "2": {
+              "name": "keyword.other.romit"
+            },
+            "3": {
+              "name": "entity.name.type.romit"
+            }
+          }
+        },
+        {
+          "match": "^\\s*(app|screen|page|view|component|spec)\\s+([A-Za-z_]\\w*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.romit"
+            },
+            "2": {
+              "name": "entity.name.type.romit"
+            }
+          }
+        },
+        {
+          "match": "^\\s*(action|fn|function|func)\\s+([A-Za-z_]\\w*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.function.romit"
+            },
+            "2": {
+              "name": "entity.name.function.romit"
+            }
+          }
+        },
+        {
+          "match": "^\\s*([A-Za-z_]\\w*)(:)(?=\\s|$)",
+          "captures": {
+            "1": {
+              "name": "entity.name.function.romit"
+            },
+            "2": {
+              "name": "punctuation.separator.romit"
+            }
+          }
+        },
+        {
+          "match": "^\\s*(computed|document|remember|template|derived|sidebar|toolbar|state|theme|data)\\b",
+          "captures": {
+            "1": {
+              "name": "storage.type.romit"
+            }
+          }
+        },
+        {
+          "match": "^\\s*(on)\\s+(background|foreground|disappear|active|appear|change|delete|double|submit|click|enter|hover|press|start|swipe|load|long|tap|url)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.event.romit"
+            },
+            "2": {
+              "name": "keyword.control.event.romit"
+            }
+          }
+        },
+        {
+          "match": "^\\s*(every)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.event.romit"
+            }
+          }
+        },
+        {
+          "match": "^\\s*(invariant|rejected|emitted|machine|returns|version|config|define|entity|expect|output|reject|stores|about|count|event|final|given|keyed|limit|emit|enum|rule|send|spec|test|all|any|max|min|per|sum)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.other.spec.romit"
+            }
+          }
+        }
+      ]
+    },
+    "line-start": {
+      "patterns": [
+        {
+          "match": "^\\s*(colorpicker|disclosure|subheading|rectangle|progress|capsule|caption|divider|ellipse|heading|rounded|section|spinner|stepper|button|circle|column|editor|picker|scroll|search|secure|slider|spacer|toggle|empty|field|gauge|group|image|label|share|stack|title|video|card|date|form|grid|icon|link|list|menu|text|wrap|box|row)\\b",
+          "captures": {
+            "1": {
+              "name": "entity.name.tag.romit"
+            }
+          }
+        },
+        {
+          "match": "^\\s*(accessibility|strikethrough|cornerradius|background|foreground|monospaced|selectable|transition|animation|autofocus|linelimit|lowercase|minheight|textcolor|underline|uppercase|animated|describe|disabled|gradient|keyboard|maxwidth|rotation|trailing|corners|focused|leading|opacity|padding|spacing|stretch|tooltip|aspect|border|bottom|center|corner|height|hidden|italic|offset|radius|rotate|shadow|sticky|strike|stroke|weight|zindex|align|alpha|badge|color|faded|lines|scale|serif|style|width|blur|bold|clip|fill|font|full|grow|help|mono|role|size|tint|wide|gap|top|bg|z)\\b",
+          "captures": {
+            "1": {
+              "name": "support.function.modifier.romit"
+            }
+          }
+        },
+        {
+          "match": "^\\s*(inspector|decrease|increase|animate|confirm|popover|present|shuffle|vibrate|append|delete|export|import|insert|notify|remove|toggle|window|alert|clear|close|cover|fetch|print|reset|share|toast|visit|back|call|copy|file|flip|home|into|load|open|save|show|sort|wait|add|ask|run|say|set|go)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.other.action.romit"
+            }
+          }
+        },
+        {
+          "match": "^\\s*([A-Z]\\w*)\\b",
+          "captures": {
+            "1": {
+              "name": "entity.name.type.component.romit"
+            }
+          }
+        }
+      ]
+    },
+    "expression": {
+      "patterns": [
+        {
+          "include": "#strings"
+        },
+        {
+          "name": "constant.other.color.romit",
+          "match": "#[0-9a-fA-F]{3,8}\\b"
+        },
+        {
+          "name": "constant.numeric.romit",
+          "match": "\\b\\d[\\d_]*(?:\\.\\d+)?\\b"
+        },
+        {
+          "match": "\\b(do)\\s+(inspector|decrease|increase|animate|confirm|popover|present|shuffle|vibrate|append|delete|export|import|insert|notify|remove|toggle|window|alert|clear|close|cover|fetch|print|reset|share|toast|visit|back|call|copy|file|flip|home|into|load|open|save|show|sort|wait|add|ask|run|say|set|go)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.romit"
+            },
+            "2": {
+              "name": "keyword.other.action.romit"
+            }
+          }
+        },
+        {
+          "name": "keyword.control.romit",
+          "match": "\\b(otherwise|repeat|unless|times|while|each|else|give|skip|stop|then|when|for|do|if|in)\\b"
+        },
+        {
+          "name": "constant.language.romit",
+          "match": "\\b(nothing|false|index|today|none|true|now|url|yes|it|no)\\b"
+        },
+        {
+          "name": "keyword.operator.word.romit",
+          "match": "\\b(placeholder|descending|ascending|remainder|contains|settings|subtitle|divided|message|options|suggest|equals|footer|header|inline|locked|random|scopes|sorted|titled|above|below|empty|least|minus|named|scope|times|where|bind|from|icon|isnt|item|less|list|more|most|plus|step|than|with|and|has|mod|not|tab|as|at|by|is|of|or|to)\\b"
+        },
+        {
+          "name": "support.function.modifier.romit",
+          "match": "(?<=\\s)(accessibility|strikethrough|cornerradius|background|foreground|monospaced|selectable|transition|animation|autofocus|linelimit|lowercase|minheight|textcolor|underline|uppercase|animated|describe|disabled|gradient|keyboard|maxwidth|rotation|trailing|corners|focused|leading|opacity|padding|spacing|stretch|tooltip|aspect|border|bottom|center|corner|height|hidden|italic|offset|radius|rotate|shadow|sticky|strike|stroke|weight|zindex|align|alpha|badge|color|faded|lines|scale|serif|style|width|blur|bold|clip|fill|font|full|grow|help|mono|role|size|tint|wide|gap|top|bg|z)\\b"
+        },
+        {
+          "name": "entity.name.type.romit",
+          "match": "\\b[A-Z]\\w*\\b"
+        },
+        {
+          "match": "(\\.)([A-Za-z_]\\w*)",
+          "captures": {
+            "1": {
+              "name": "punctuation.accessor.romit"
+            },
+            "2": {
+              "name": "variable.other.property.romit"
+            }
+          }
+        },
+        {
+          "name": "keyword.operator.romit",
+          "match": "\\+=|-=|==|!=|<=|>=|[+\\-*/%<>=]"
+        },
+        {
+          "name": "punctuation.separator.comma.romit",
+          "match": ","
+        },
+        {
+          "name": "invalid.illegal.bracket.romit",
+          "match": "[()\\[\\]{}]"
+        },
+        {
+          "name": "variable.other.romit",
+          "match": "\\b[a-z_]\\w*\\b"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.romit",
+          "begin": "\"",
+          "end": "\"",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.romit"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.romit"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#string-content"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.double.romit",
+          "begin": "“",
+          "end": "”",
+          "patterns": [
+            {
+              "include": "#string-content"
+            }
+          ]
+        }
+      ]
+    },
+    "string-content": {
+      "patterns": [
+        {
+          "name": "constant.character.escape.romit",
+          "match": "\\{\\{|\\}\\}|\\\\."
+        },
+        {
+          "name": "meta.embedded.interpolation.romit",
+          "begin": "\\{",
+          "end": "\\}",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.section.interpolation.begin.romit"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.interpolation.end.romit"
+            }
+          },
+          "contentName": "meta.embedded.expression.romit",
+          "patterns": [
+            {
+              "include": "#interp-expression"
+            }
+          ]
+        }
+      ]
+    },
+    "interp-expression": {
+      "patterns": [
+        {
+          "name": "constant.numeric.romit",
+          "match": "\\b\\d[\\d_]*(?:\\.\\d+)?\\b"
+        },
+        {
+          "name": "keyword.operator.word.romit",
+          "match": "\\b(placeholder|descending|ascending|otherwise|remainder|contains|settings|subtitle|divided|message|options|suggest|equals|footer|header|inline|locked|random|repeat|scopes|sorted|titled|unless|above|below|empty|least|minus|named|scope|times|where|while|bind|each|else|from|give|icon|isnt|item|less|list|more|most|plus|skip|step|stop|than|then|when|with|and|for|has|mod|not|tab|as|at|by|do|if|in|is|of|or|to)\\b"
+        },
+        {
+          "name": "constant.language.romit",
+          "match": "\\b(nothing|false|index|today|none|true|now|url|yes|it|no)\\b"
+        },
+        {
+          "match": "(\\.)([A-Za-z_]\\w*)",
+          "captures": {
+            "1": {
+              "name": "punctuation.accessor.romit"
+            },
+            "2": {
+              "name": "variable.other.property.romit"
+            }
+          }
+        },
+        {
+          "name": "keyword.operator.romit",
+          "match": "==|!=|<=|>=|[+\\-*/%<>]"
+        },
+        {
+          "name": "variable.other.romit",
+          "match": "\\b[A-Za-z_]\\w*\\b"
+        }
+      ]
+    }
+  }
+}

@@ -12,7 +12,7 @@ const mod = await import(pathToFileURL(jsPath).href);
 const bytes = readFileSync(wasmPath);
 await mod.default(bytes);
 const version = mod.romit_version();
-if (version !== "0.0.3") {
+if (version !== "0.1.0") {
   console.error("unexpected version", version);
   process.exit(1);
 }

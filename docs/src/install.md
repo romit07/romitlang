@@ -28,7 +28,7 @@ Download the `.tar.gz` for your CPU:
 | Intel Mac | `x86_64-apple-darwin` |
 
 ```bash
-export ROMIT_VERSION=0.0.3
+export ROMIT_VERSION=0.1.0
 curl -fsSL -O "https://github.com/romit07/romitlang/releases/download/v${ROMIT_VERSION}/romit-${ROMIT_VERSION}-aarch64-apple-darwin.tar.gz"
 curl -fsSL -O "https://github.com/romit07/romitlang/releases/download/v${ROMIT_VERSION}/SHA256SUMS"
 sha256sum -c SHA256SUMS --ignore-missing
@@ -57,7 +57,7 @@ fish_add_path $HOME/.romit/bin
 | arm64 | `aarch64-unknown-linux-gnu` |
 
 ```bash
-export ROMIT_VERSION=0.0.3
+export ROMIT_VERSION=0.1.0
 curl -fsSL -O "https://github.com/romit07/romitlang/releases/download/v${ROMIT_VERSION}/romit-${ROMIT_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
 curl -fsSL -O "https://github.com/romit07/romitlang/releases/download/v${ROMIT_VERSION}/SHA256SUMS"
 sha256sum -c SHA256SUMS --ignore-missing
@@ -91,7 +91,7 @@ sha256sum -c SHA256SUMS --ignore-missing
 On Windows PowerShell:
 
 ```powershell
-Get-FileHash .\romit-0.0.3-x86_64-pc-windows-msvc.zip -Algorithm SHA256
+Get-FileHash .\romit-0.1.0-x86_64-pc-windows-msvc.zip -Algorithm SHA256
 # Compare with the matching line in SHA256SUMS
 ```
 
@@ -102,7 +102,7 @@ Re-run the one-line installer, or download the newer release asset and replace t
 Pin a version:
 
 ```bash
-ROMIT_VERSION=0.0.3 curl -fsSL https://romitlang.org/install.sh | sh
+ROMIT_VERSION=0.1.0 curl -fsSL https://romitlang.org/install.sh | sh
 ```
 
 ## Uninstall

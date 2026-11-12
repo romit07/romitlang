@@ -86,15 +86,52 @@ jobs:
             romit-*-${{ matrix.artifact_name }}.tar.gz
             romit-*-${{ matrix.artifact_name }}.zip
 
+  vscode:
+    name: VS Code extension
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: editors/vscode
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm test
+      - name: Package
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          npm version "$version" --no-git-tag-version --allow-same-version
+          npx --yes @vscode/vsce@3 package --no-dependencies -o "../../romit-${version}.vsix"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-vscode
+          path: romit-*.vsix
+
   release:
     name: Publish GitHub Release
-    needs: build
+    needs: [build, vscode]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
+
+      - name: Release notes from CHANGELOG.md
+        run: |
+          # The "## vX.Y.Z" section of CHANGELOG.md, up to the next "## " heading.
+          awk -v tag="$GITHUB_REF_NAME" '
+            /^## / { if (found) exit; if ($2 == tag || $2 == tag ":") { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "No CHANGELOG.md section for $GITHUB_REF_NAME" > release-notes.md
+          fi
+          cat release-notes.md
 
       - name: Generate SHA256SUMS
         run: |
@@ -114,6 +151,7 @@ jobs:
           files: |
             artifacts/*
             artifacts/SHA256SUMS
+          body_path: release-notes.md
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

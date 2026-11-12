@@ -36,6 +36,24 @@ jobs:
       - run: ./scripts/build_wasm.sh /tmp/romit-wasm-pkg
       - run: test -f /tmp/romit-wasm-pkg/romit_wasm_bg.wasm
 
+  vscode-extension:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: editors/vscode
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Grammar is up to date with the compiler's vocabulary
+        run: |
+          python3 scripts/build_grammar.py
+          git diff --exit-code -- syntaxes/
+      - run: npm test
+      - run: npx --yes @vscode/vsce@3 package --no-dependencies
+
   install-script-linux:
     runs-on: ubuntu-latest
     steps:

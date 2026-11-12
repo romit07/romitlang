@@ -11,6 +11,7 @@
 - [macOS quick start](getting-started/macos.md)
 - [Windows quick start](getting-started/windows.md)
 - [Hello world](getting-started/hello.md)
+- [Editor support](getting-started/editor.md)
 
 # Tutorials
 
