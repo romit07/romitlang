@@ -31,7 +31,7 @@ app Todos
 
 `romit build todos.rmt` produces one `index.html` you can open anywhere. It looks native on each device: Apple style on iPhone, iPad and Mac, Material 3 on Android, Windows and Linux (or pick one with `theme` → `look material`). See [Building apps](https://romitlang.org/ui-apps.html) and the [SwiftUI → Romit map](https://romitlang.org/reference/swiftui-map.html).
 
-Current release line: **v0.0.2**
+Current release line: **v0.0.3**
 
 See [Why Romit](https://romitlang.org/why.html) for motivation and a before/after example.
 
@@ -49,10 +49,10 @@ curl -fsSL https://romitlang.org/install.sh | sh
 irm https://romitlang.org/install.ps1 | iex
 ```
 
-Pin version **0.0.2**:
+Pin version **0.0.3**:
 
 ```bash
-ROMIT_VERSION=0.0.2 curl -fsSL https://romitlang.org/install.sh | sh
+ROMIT_VERSION=0.0.3 curl -fsSL https://romitlang.org/install.sh | sh
 ```
 
 Binaries are built for Linux `x86_64` and `aarch64` GNU, macOS Intel and Apple Silicon, and Windows `x86_64`. See [Install](https://romitlang.org/install.html) on the docs site for manual downloads, checksum verification, PATH setup, updates, and uninstall.
