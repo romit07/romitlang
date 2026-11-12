@@ -82,15 +82,15 @@
           </article>
           <article class="card">
             <h3>One tool</h3>
-            <p><code>romit run</code> for scripts; <code>romit check</code> and <code>romit test</code> when you use the optional spec layer; <code>romit build</code> for UI pages.</p>
+            <p><code>romit run</code> for scripts; <code>romit check</code> and <code>romit test</code> when you use the optional spec layer; <code>romit build</code> for apps and pages.</p>
           </article>
           <article class="card">
             <h3>Optional checks &amp; tests</h3>
             <p>Rules, machines, invariants, and <code>test</code> blocks when you want them — not required for every file.</p>
           </article>
           <article class="card">
-            <h3>Romit UI</h3>
-            <p><code>use ui</code> and <code>romit build</code> emit static HTML and CSS today; reactive screens and APIs remain planned.</p>
+            <h3>Apps like SwiftUI</h3>
+            <p><code>use ui</code> builds reactive apps: state, stacks, controls, navigation, tabs, sheets, and saved data, all in one <code>index.html</code>.</p>
           </article>
         </div>
       </div>
@@ -161,21 +161,27 @@ romit --version</code></pre>
 
     <section class="features" id="landing-ui">
       <div class="section-inner">
-        <h2 class="section-title">Landing page in 12 lines</h2>
-        <p>Romit UI lives in a separate framework (<code>use ui</code>). <code>romit build</code> writes <code>index.html</code> and <code>style.css</code> — browsers never read <code>.rmt</code>.</p>
-        <pre class="code-panel" aria-label="Sample Romit UI page"><code><span class="kw">use</span> ui
+        <h2 class="section-title">A to-do app in 16 lines</h2>
+        <p>Describe the screen for the current data; Romit redraws it when the data changes, like SwiftUI. <code>romit build</code> writes one <code>index.html</code> that runs in any browser. Browsers never read <code>.rmt</code>.</p>
+        <pre class="code-panel" aria-label="Sample Romit app"><code><span class="kw">use</span> ui
 
-<span class="kw">page</span> Landing
-  <span class="kw">header</span>
-    brand "Acme"
-    nav "Features" "Pricing" "Contact"
-  <span class="kw">hero</span>
-    title "Ship faster"
-    text "One line to say what it does."
-    button "Get started"
-  <span class="kw">footer</span>
-    text "© Acme"</code></pre>
-        <p style="margin-top:1rem"><a href="ui-framework.html">UI framework docs</a> · <a href="https://github.com/romit07/romitlang/blob/main/examples/ui/landing.rmt">full example</a></p>
+<span class="kw">app</span> Todos
+  <span class="kw">state</span>
+    draft is ""
+    todos is list saved
+
+  <span class="kw">screen</span> Home "My Todos"
+    row
+      field "What needs doing?" bind draft
+      button "Add" do add draft to todos
+        style prominent
+        disabled if draft is empty
+    list
+      for each todo in todos
+        text todo
+          on delete do remove todo from todos
+    caption "{count of todos} to do"</code></pre>
+        <p style="margin-top:1rem"><a href="ui-apps.html">Building apps</a> · <a href="reference/swiftui-map.html">SwiftUI → Romit</a> · <a href="playground/">try it live</a> · <a href="https://github.com/romit07/romitlang/tree/main/examples/apps">example apps</a></p>
       </div>
     </section>
 
@@ -192,9 +198,9 @@ romit --version</code></pre>
         <h2 class="section-title">Roadmap</h2>
         <div class="roadmap-strip">
           <span class="roadmap-chip done">Stage 0–1: scripts, optional specs, playground</span>
-          <span class="roadmap-chip">Stage 2: richer functions &amp; replay</span>
+          <span class="roadmap-chip done">Stage 2: lists, decimals, text interpolation</span>
           <span class="roadmap-chip">Stage 3: entities &amp; machines</span>
-          <span class="roadmap-chip done">Stage 4: Romit UI MVP (static build)</span>
+          <span class="roadmap-chip done">Stage 4: Romit UI: reactive apps &amp; static pages</span>
         </div>
         <p style="margin-top:1rem"><a href="reference/roadmap.html">Full roadmap</a></p>
       </div>
