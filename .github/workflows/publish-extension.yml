@@ -1,0 +1,54 @@
+name: Publish VS Code extension
+
+# Publishes the .vsix attached to a GitHub release to the VS Code Marketplace
+# and Open VSX. Runs after every successful Release, or by hand for any tag.
+# Each marketplace is skipped quietly when its token secret is not set.
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish, e.g. v0.1.0"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    env:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.inputs.tag || github.event.workflow_run.head_branch }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Download .vsix from the release
+        run: |
+          echo "Tag: $TAG"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'romit-*.vsix'
+          ls -l romit-*.vsix
+
+      - name: VS Code Marketplace
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "VSCE_PAT is not set; skipping the VS Code Marketplace."
+            exit 0
+          fi
+          npx --yes @vscode/vsce@3 publish --packagePath romit-*.vsix --pat "$VSCE_PAT" --skip-duplicate
+
+      - name: Open VSX
+        run: |
+          if [ -z "$OVSX_PAT" ]; then
+            echo "OVSX_PAT is not set; skipping Open VSX."
+            exit 0
+          fi
+          npx --yes ovsx@0 publish romit-*.vsix --pat "$OVSX_PAT" --skip-duplicate
