@@ -18,6 +18,7 @@ pub struct Gen<'a, 'b> {
     /// inside a `where` predicate: unknown bare names are fields of `it`
     where_depth: usize,
     line: usize,
+    has_document: bool,
 }
 
 pub fn js_str(s: &str) -> String {
@@ -86,6 +87,7 @@ impl<'a, 'b> Gen<'a, 'b> {
             scopes: Vec::new(),
             where_depth: 0,
             line: 1,
+            has_document: !app.document.is_empty(),
         };
         let mut seen = HashSet::new();
         for (name, line) in app
@@ -441,10 +443,36 @@ impl<'a, 'b> Gen<'a, 'b> {
                 let a = self.args(args);
                 let _ = writeln!(out, "R.go({}, {a});", js_str(s));
             }
-            Action::Show(s, args) => {
+            Action::Show(s, args, style, locked) => {
                 self.check_screen(s, args.len());
                 let a = self.args(args);
-                let _ = writeln!(out, "R.sheet({}, {a});", js_str(s));
+                let _ = writeln!(
+                    out,
+                    "R.sheet({}, {a}, {}, {locked});",
+                    js_str(s),
+                    js_str(style)
+                );
+            }
+            Action::OpenWindow(s, args) => {
+                self.check_screen(s, args.len());
+                let a = self.args(args);
+                let _ = writeln!(out, "R.openWindow({}, {a});", js_str(s));
+            }
+            Action::OpenFile(t, kind) => {
+                let t = self.target(t);
+                let _ = writeln!(out, "{t} = await R.openFile({}, {t});", js_str(kind));
+            }
+            Action::SaveFile(v, name) => {
+                let v = self.expr(v);
+                let n = self.expr(name);
+                let _ = writeln!(out, "R.saveFile({v}, {n});");
+            }
+            Action::Document(cmd) => {
+                if !self.has_document {
+                    self.err("U118", "this app has no `document` line", self.line,
+                        Some("add at the app level, e.g. `document notes, title named \"Notes.json\"`".into()));
+                }
+                let _ = writeln!(out, "await R.doc.{cmd}();");
             }
             Action::GoBack => out.push_str("R.back();\n"),
             Action::GoHome => out.push_str("R.home();\n"),
@@ -703,7 +731,7 @@ impl<'a, 'b> Gen<'a, 'b> {
         props.push(format!("a: [{}]", args.join(", ")));
         for (k, vals) in &el.kw {
             let v = match k.as_str() {
-                "bind" => {
+                "bind" | "scope" => {
                     let Some(t) = vals.first() else { continue };
                     let get = self.expr(t);
                     let set = self.target(t);
@@ -722,7 +750,7 @@ impl<'a, 'b> Gen<'a, 'b> {
                     self.expr(&vals[0])
                 }
                 "with" if el.kw("to").is_some() => continue,
-                "options" => {
+                "options" | "scopes" | "suggest" => {
                     let parts: Vec<String> = vals.iter().map(|e| self.expr(e)).collect();
                     format!("R.opts([{}])", parts.join(", "))
                 }
@@ -943,6 +971,30 @@ impl<'a, 'b> Gen<'a, 'b> {
             let params: Vec<String> = v.params.iter().map(|p| format!("L_{p}")).collect();
             let _ = writeln!(out, "V.{} = ({}) => {body};", v.name, params.join(", "));
         }
+        // document (DocumentGroup)
+        if !app.document.is_empty() {
+            self.line = app.document_line;
+            for n in &app.document {
+                if !self.states.contains(n) {
+                    self.err(
+                        "U118",
+                        format!("`document` names `{n}`, which is not in `state`"),
+                        app.document_line,
+                        None,
+                    );
+                }
+            }
+            let names: Vec<String> = app.document.iter().map(|n| js_str(n)).collect();
+            let file = match &app.document_name {
+                Some(e) => self.expr(e),
+                None => js_str(&format!("{}.json", app.name)),
+            };
+            let _ = writeln!(
+                out,
+                "R.document = {{names: [{}], file: () => {file}}};",
+                names.join(", ")
+            );
+        }
         // screens
         for s in &app.screens {
             self.line = s.line;
@@ -955,8 +1007,22 @@ impl<'a, 'b> Gen<'a, 'b> {
                 Some(t) => self.expr(t),
                 None => js_str(&humanize(&s.name)),
             };
+            let subtitle = match &s.subtitle {
+                Some(t) => self.expr(t),
+                None => "null".into(),
+            };
             let body = self.nodes(&s.body);
-            let toolbar = self.nodes(&s.toolbar);
+            let sidebar = if s.sidebar.is_empty() {
+                "null".to_string()
+            } else {
+                format!("({params}) => {}", self.nodes(&s.sidebar))
+            };
+            let mut bars = Vec::new();
+            for (place, nodes) in &s.toolbar {
+                let n = self.nodes(nodes);
+                bars.push(format!("{{place: {}, items: {n}}}", js_str(place)));
+            }
+            let toolbar = format!("[{}]", bars.join(", "));
             let mut evs = Vec::new();
             let mut timers = Vec::new();
             let mut watches = Vec::new();
@@ -974,7 +1040,9 @@ impl<'a, 'b> Gen<'a, 'b> {
                             "{{get: ({params}) => {w}, run: ({params}) => {h}()}}"
                         ));
                     }
-                    "appear" | "disappear" => evs.push(format!("{}: ({params}) => {h}()", ev.kind)),
+                    "appear" | "disappear" | "background" | "foreground" => {
+                        evs.push(format!("{}: ({params}) => {h}()", ev.kind))
+                    }
                     other => self.err(
                         "U104",
                         format!("`on {other}` belongs on an element, not a screen"),
@@ -992,9 +1060,11 @@ impl<'a, 'b> Gen<'a, 'b> {
             };
             let _ = writeln!(
                 out,
-                "R.screens[{name}] = {{name: {name}, params: {np}, tab: {tab}, title: ({params}) => {title}, body: ({params}) => {body}, toolbar: ({params}) => {toolbar}, events: {{{evs}}}, timers: [{timers}], watches: [{watches}]}};",
+                "R.screens[{name}] = {{name: {name}, params: {np}, tab: {tab}, inline: {inline}, settings: {settings}, title: ({params}) => {title}, subtitle: ({params}) => {subtitle}, body: ({params}) => {body}, sidebar: {sidebar}, toolbar: ({params}) => {toolbar}, events: {{{evs}}}, timers: [{timers}], watches: [{watches}]}};",
                 name = js_str(&s.name),
                 np = s.params.len(),
+                inline = s.inline,
+                settings = s.settings,
                 evs = evs.join(", "),
                 timers = timers.join(", "),
                 watches = watches.join(", "),
@@ -1004,6 +1074,13 @@ impl<'a, 'b> Gen<'a, 'b> {
         // app events
         for ev in &app.events {
             self.line = ev.line;
+            if ev.kind == "url" {
+                self.scopes.push("url".into());
+                let h = self.handler(&ev.actions);
+                self.scopes.pop();
+                let _ = writeln!(out, "R.onUrl = (L_url) => {h}();");
+                continue;
+            }
             let h = self.handler(&ev.actions);
             match ev.kind.as_str() {
                 "every" => {
@@ -1015,6 +1092,13 @@ impl<'a, 'b> Gen<'a, 'b> {
                 }
                 "appear" => {
                     let _ = writeln!(out, "R.starts.push(() => {h}());");
+                }
+                "background" | "foreground" => {
+                    let _ = writeln!(
+                        out,
+                        "R.phases.push({{kind: {}, run: () => {h}()}});",
+                        js_str(&ev.kind)
+                    );
                 }
                 "change" if ev.arg.is_some() => {
                     let w = self.expr(ev.arg.as_ref().unwrap());

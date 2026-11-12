@@ -227,6 +227,54 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .r-toasts { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 70; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
 .r-toast { background: rgba(30,30,32,.92); color: #fff; padding: 10px 18px; border-radius: 999px; font-size: .95rem; animation: r-pop .2s ease-out; box-shadow: 0 6px 24px rgba(0,0,0,.25); }
 
+/* split view (NavigationSplitView) */
+.r-split { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; min-height: 100vh; }
+.r-sidebar { border-right: .5px solid var(--separator); background: var(--surface); padding: 12px 10px; position: sticky; top: 0; height: 100vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.r-sidebar-title { font-family: var(--title-font); font-size: 1.6rem; font-weight: 700; padding: 6px 8px 10px; }
+.r-sidebar .r-list, .r-sidebar .r-section-body { background: none; }
+.r-sidebar .r-row-item { background: none; padding: 2px 4px; min-height: 0; }
+.r-sidebar .r-row-item + .r-row-item::before { display: none; }
+.r-sidebar .r-navlink { padding: 9px 10px; border-radius: 9px; }
+.r-sidebar .r-navlink:hover { background: var(--surface-2); }
+.r-sidebar .r-navlink.on { background: var(--accent); color: #fff; }
+.r-sidebar .r-navlink.on .r-chevron, .r-sidebar .r-chevron { display: none; }
+.r-sidebar-bar { display: flex; align-items: center; gap: 4px; min-height: 36px; }
+.r-sidebar-bar .r-button { background: none; padding: 6px 8px; }
+.r-sidebar-subtitle { padding: 0 8px 8px; margin-top: -8px; color: var(--muted); font-size: .9rem; }
+.r-sidebar-bottom { margin-top: auto; display: flex; gap: 6px; padding-top: 8px; border-top: .5px solid var(--separator); }
+.r-sidebar-bottom .r-button { background: none; padding: 6px 8px; font-weight: 500; }
+.r-sidebar-inline { display: flex; flex-direction: column; gap: 14px; }
+.r-split-detail { min-width: 0; display: flex; flex-direction: column; }
+
+/* titles and bars */
+.r-navbar-title { display: flex; flex-direction: column; align-items: center; line-height: 1.2; }
+.r-navbar-subtitle { font-size: .75rem; font-weight: 400; color: var(--muted); }
+.r-root .r-navbar-subtitle { display: none; }
+.r-subtitle { margin: -4px 0 4px; color: var(--muted); font-size: 1rem; }
+.r-bottombar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 25; display: flex; gap: 12px; justify-content: space-around; align-items: center; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); background: var(--bar); backdrop-filter: saturate(180%) blur(18px); -webkit-backdrop-filter: saturate(180%) blur(18px); border-top: .5px solid var(--separator); }
+.r-bottombar .r-button { background: none; padding: 6px 10px; }
+.r-has-bottombar { padding-bottom: 64px; }
+.r-has-tabs .r-bottombar { bottom: 62px; }
+.r-has-tabs.r-has-bottombar { padding-bottom: 130px; }
+.r-settings-button { background: none; padding: 6px 8px; font-size: 1.2rem; }
+.r-navbar-lead .r-button { background: none; padding: 6px 8px; }
+.r-shortcut { margin-left: auto; color: var(--muted); font-size: .8rem; }
+.r-menu-left .r-menu-items { left: 0; right: auto; }
+
+/* presentations: half sheet, full-screen cover, popover, inspector */
+.r-grabber { width: 36px; height: 5px; border-radius: 3px; background: var(--separator); margin: 6px auto -2px; }
+.r-sheet-half { max-height: 52vh; }
+.r-cover { position: fixed; inset: 0; z-index: 55; background: var(--bg); overflow: auto; animation: r-up .3s cubic-bezier(.2,.9,.3,1); }
+.r-popover-backdrop { position: fixed; inset: 0; z-index: 55; }
+.r-popover { position: fixed; max-height: 70vh; overflow: auto; background: var(--surface); border-radius: 14px; box-shadow: 0 12px 48px rgba(0,0,0,.25), 0 0 0 .5px var(--separator); animation: r-pop .18s ease-out; }
+.r-screen-popover .r-content { padding: 14px; }
+.r-inspector { position: fixed; top: 0; right: 0; bottom: 0; width: 340px; z-index: 35; background: var(--bg); border-left: .5px solid var(--separator); overflow: auto; box-shadow: -8px 0 32px rgba(0,0,0,.08); animation: r-slide-in .25s ease-out; }
+.r-has-inspector { padding-right: 340px; }
+@keyframes r-slide-in { from { transform: translateX(40px); opacity: 0; } }
+
+/* search scopes */
+.r-search-wrap { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+
 /* motion */
 .r-animated, .r-animating .r-app * { transition: all .35s cubic-bezier(.2,.9,.3,1); }
 .r-tr-fade { animation: r-fade .3s ease-out; }

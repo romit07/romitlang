@@ -21,6 +21,7 @@ const BUILT_IN = {
   app_todos: { name: "App: Todos (UI)", file: "todos.rmt" },
   app_notes: { name: "App: Notes (UI)", file: "notes.rmt" },
   app_showcase: { name: "App: Showcase (UI)", file: "showcase.rmt" },
+  app_mail: { name: "App: Mail — split view, sheets, files (UI)", file: "mail.rmt" },
 };
 
 const editor = document.getElementById("editor");

@@ -238,6 +238,39 @@ fn app_item(cx: &mut Ctx, app: &mut App, l: &Line) {
                 app.events.push(ev);
             }
         }
+        "document" => {
+            // document notes, title [named "Notes.json"]
+            app.document_line = l.line_no;
+            let mut i = 1;
+            while i < l.toks.len() {
+                match &l.toks[i] {
+                    Tok::Word(w) if w == "named" || w == "called" => {
+                        app.document_name = one_expr(cx, l, i + 1, &never);
+                        break;
+                    }
+                    Tok::Word(w) if w == "and" => {}
+                    Tok::Word(w) => app.document.push(w.clone()),
+                    Tok::Sym(",") => {}
+                    t => cx.at(
+                        l,
+                        i,
+                        "U003",
+                        format!("expected a state name, found {}", t.describe()),
+                        None,
+                    ),
+                }
+                i += 1;
+            }
+            if app.document.is_empty() {
+                cx.at(
+                    l,
+                    1,
+                    "U003",
+                    "`document` needs the state values it saves",
+                    Some("e.g. `document notes, title named \"Notes.json\"`".into()),
+                );
+            }
+        }
         _ => cx.at(
             l,
             0,
@@ -463,6 +496,14 @@ fn parse_params(cx: &mut Ctx, l: &Line, mut i: usize) -> Vec<String> {
     out
 }
 
+const SCREEN_WORDS: &[&str] = &[
+    "with", "tab", "icon", "titled", "title", "subtitle", "inline", "settings",
+];
+
+fn screen_stop(w: &str) -> bool {
+    SCREEN_WORDS.contains(&w)
+}
+
 fn parse_screen(cx: &mut Ctx, l: &Line) -> Option<Screen> {
     let Some(Tok::Word(name)) = l.toks.get(1) else {
         cx.at(
@@ -477,9 +518,13 @@ fn parse_screen(cx: &mut Ctx, l: &Line) -> Option<Screen> {
     let mut s = Screen {
         name: name.clone(),
         title: None,
+        subtitle: None,
         params: Vec::new(),
         tab_icon: None,
+        inline: false,
+        settings: false,
         toolbar: Vec::new(),
+        sidebar: Vec::new(),
         body: Vec::new(),
         events: Vec::new(),
         line: l.line_no,
@@ -488,8 +533,7 @@ fn parse_screen(cx: &mut Ctx, l: &Line) -> Option<Screen> {
     while i < l.toks.len() {
         match &l.toks[i] {
             Tok::Str(_) => {
-                let stop = |w: &str| matches!(w, "with" | "tab" | "icon");
-                let mut p = ExprParser::new(&l.toks, i, &stop, l.line_no);
+                let mut p = ExprParser::new(&l.toks, i, &screen_stop, l.line_no);
                 match p.parse() {
                     Ok(e) => s.title = Some(e),
                     Err(e) => {
@@ -499,10 +543,11 @@ fn parse_screen(cx: &mut Ctx, l: &Line) -> Option<Screen> {
                 }
                 i = p.pos;
             }
-            Tok::Word(w) if w == "titled" || w == "title" => {
-                let stop = |w: &str| matches!(w, "with" | "tab" | "icon");
-                let mut p = ExprParser::new(&l.toks, i + 1, &stop, l.line_no);
+            Tok::Word(w) if w == "titled" || w == "title" || w == "subtitle" => {
+                let is_sub = w == "subtitle";
+                let mut p = ExprParser::new(&l.toks, i + 1, &screen_stop, l.line_no);
                 match p.parse() {
+                    Ok(e) if is_sub => s.subtitle = Some(e),
                     Ok(e) => s.title = Some(e),
                     Err(e) => {
                         cx.expr_err(l, e);
@@ -510,41 +555,45 @@ fn parse_screen(cx: &mut Ctx, l: &Line) -> Option<Screen> {
                     }
                 }
                 i = p.pos;
+            }
+            Tok::Word(w) if w == "inline" => {
+                s.inline = true;
+                i += 1;
+            }
+            Tok::Word(w) if w == "settings" => {
+                s.settings = true;
+                i += 1;
             }
             Tok::Word(w) if w == "tab" || w == "icon" => {
                 i += 1;
                 if l.toks.get(i).and_then(|t| t.word()) == Some("icon") {
                     i += 1;
                 }
-                match l.toks.get(i) {
+                let icon = match l.toks.get(i) {
                     Some(Tok::Str(icon)) => {
-                        s.tab_icon =
-                            Some(Expr::Text(vec![super::expr::TextPart::Lit(icon.clone())]));
                         i += 1;
+                        icon.clone()
                     }
-                    _ => {
-                        s.tab_icon =
-                            Some(Expr::Text(vec![super::expr::TextPart::Lit(String::new())]));
-                    }
-                }
+                    _ => String::new(),
+                };
+                s.tab_icon = Some(Expr::Text(vec![super::expr::TextPart::Lit(icon)]));
             }
             Tok::Word(w) if w == "with" => {
                 let mut j = i + 1;
                 while j < l.toks.len() {
                     match &l.toks[j] {
-                        Tok::Word(w) if w == "tab" || w == "icon" || w == "titled" => break,
+                        Tok::Word(w) if screen_stop(w) && w != "with" => break,
+                        Tok::Str(_) => break,
                         Tok::Word(w) if w == "and" => {}
                         Tok::Word(w) => s.params.push(w.clone()),
                         Tok::Sym(",") => {}
-                        t => {
-                            cx.at(
-                                l,
-                                j,
-                                "U003",
-                                format!("expected a parameter name, found {}", t.describe()),
-                                None,
-                            );
-                        }
+                        t => cx.at(
+                            l,
+                            j,
+                            "U003",
+                            format!("expected a parameter name, found {}", t.describe()),
+                            None,
+                        ),
                     }
                     j += 1;
                 }
@@ -552,7 +601,7 @@ fn parse_screen(cx: &mut Ctx, l: &Line) -> Option<Screen> {
             }
             t => {
                 cx.at(l, i, "U003", format!("unexpected {} on screen line", t.describe()),
-                    Some("screen lines look like `screen Home \"My title\" tab \"house\"` or `screen Detail with todo`".into()));
+                    Some("screen lines look like `screen Home \"My title\" tab \"house\"`, `screen Detail with todo titled todo.title`, or `screen Prefs settings`".into()));
                 return None;
             }
         }
@@ -560,7 +609,38 @@ fn parse_screen(cx: &mut Ctx, l: &Line) -> Option<Screen> {
     let mut body_lines: Vec<Line> = Vec::new();
     for c in &l.children {
         match c.toks[0].word() {
-            Some("toolbar") => s.toolbar.extend(parse_nodes(cx, &c.children)),
+            Some("toolbar") => {
+                let place = match c.toks.get(1).and_then(|t| t.word()) {
+                    None => "trailing",
+                    Some("trailing") | Some("right") | Some("top") => "trailing",
+                    Some("leading") | Some("left") => "leading",
+                    Some("bottom") => "bottom",
+                    Some("title") | Some("principal") | Some("center") => "title",
+                    Some(other) => {
+                        cx.at(
+                            c,
+                            1,
+                            "U003",
+                            format!("unknown toolbar place `{other}`"),
+                            Some("toolbar places: leading, trailing, title, bottom".into()),
+                        );
+                        continue;
+                    }
+                };
+                let nodes = parse_nodes(cx, &c.children);
+                s.toolbar.push((place.to_string(), nodes));
+            }
+            Some("sidebar") => {
+                if c.toks.len() > 1 {
+                    cx.at(c, 1, "U003", "`sidebar` takes indented lines only", None);
+                }
+                s.sidebar.extend(parse_nodes(cx, &c.children));
+            }
+            Some("subtitle") if c.children.is_empty() => {
+                if let Some(e) = one_expr(cx, c, 1, &never) {
+                    s.subtitle = Some(e);
+                }
+            }
             Some("on") | Some("every") => {
                 if let Some(ev) = parse_event(cx, c) {
                     s.events.push(ev);
@@ -789,7 +869,7 @@ fn parse_tail(cx: &mut Ctx, l: &Line, mut i: usize, el: &mut Element) {
         if kwargs.contains(&canonical_kwarg(w)) {
             let name = canonical_kwarg(w).to_string();
             i += 1;
-            if name == "bind" {
+            if name == "bind" || name == "scope" {
                 // a value name, not an expression: `bind size`, `bind todo.done`
                 match path_expr(cx, l, i, &never) {
                     Some((e, j)) => {
@@ -812,7 +892,7 @@ fn parse_tail(cx: &mut Ctx, l: &Line, mut i: usize, el: &mut Element) {
                 }
                 i = p.pos;
                 // `options "S", "M", "L"` / `with a, b`
-                if (name == "options" || name == "with")
+                if matches!(name.as_str(), "options" | "with" | "suggest" | "scopes")
                     && l.toks.get(i).is_some_and(|t| t.is_sym(","))
                 {
                     i += 1;
@@ -993,9 +1073,14 @@ fn parse_event(cx: &mut Ctx, l: &Line) -> Option<EventBlock> {
             ["submit", ..] | ["enter", ..] | ["return", ..] => ("submit", 1),
             ["delete", ..] | ["swipe", ..] => ("delete", 1),
             ["disappear", ..] | ["leave", ..] => ("disappear", 1),
+            ["background", ..] | ["hidden", ..] | ["inactive", ..] => ("background", 1),
+            ["foreground", ..] | ["active", ..] | ["visible", ..] | ["resume", ..] => {
+                ("foreground", 1)
+            }
+            ["url", ..] | ["link", ..] => ("url", 1),
             _ => {
                 cx.at(l, 1, "U104", "unknown event",
-                    Some("events: on tap, on double tap, on long press, on hover, on appear, on change of x, on submit, on delete, every 1 second".into()));
+                    Some("events: on tap, on double tap, on long press, on hover, on appear, on change of x, on submit, on delete, on background, on foreground, on url, every 1 second".into()));
                 return None;
             }
         };
@@ -1199,6 +1284,48 @@ fn expect_end(cx: &mut Ctx, l: &Line, i: usize) -> bool {
     true
 }
 
+/// `with a, b` at token `i` (or nothing), then end of line.
+fn parse_with_args(cx: &mut Ctx, l: &Line, i: usize) -> Option<Vec<Expr>> {
+    let mut args = Vec::new();
+    if l.toks.get(i).and_then(|t| t.word()) == Some("with") {
+        let mut j = i + 1;
+        loop {
+            let mut p = ExprParser::new(&l.toks, j, &never, l.line_no);
+            match p.parse() {
+                Ok(e) => args.push(e),
+                Err(e) => {
+                    cx.expr_err(l, e);
+                    return None;
+                }
+            }
+            j = p.pos;
+            if l.toks.get(j).is_some_and(|t| t.is_sym(",")) {
+                j += 1;
+                continue;
+            }
+            break;
+        }
+        if !expect_end(cx, l, j) {
+            return None;
+        }
+    } else if !expect_end(cx, l, i) {
+        return None;
+    }
+    Some(args)
+}
+
+/// Presentation styles for `show Screen as …` (SwiftUI sheet / detents / cover / popover / inspector).
+const SHOW_STYLES: &[&str] = &[
+    "sheet",
+    "half",
+    "full",
+    "cover",
+    "popover",
+    "inspector",
+    "large",
+    "medium",
+];
+
 fn parse_action(cx: &mut Ctx, l: &Line, children: &[Line]) -> Option<Action> {
     let a = parse_action_inner(cx, l, children)?;
     Some(Action::At(l.line_no, Box::new(a)))
@@ -1219,35 +1346,7 @@ fn parse_action_inner(cx: &mut Ctx, l: &Line, children: &[Line]) -> Option<Actio
         }
     };
     let word = |i: usize| l.toks.get(i).and_then(|t| t.word());
-    let with_args = |cx: &mut Ctx, i: usize| -> Option<Vec<Expr>> {
-        let mut args = Vec::new();
-        if word(i) == Some("with") {
-            let mut j = i + 1;
-            loop {
-                let stop = |_: &str| false;
-                let mut p = ExprParser::new(&l.toks, j, &stop, l.line_no);
-                match p.parse() {
-                    Ok(e) => args.push(e),
-                    Err(e) => {
-                        cx.expr_err(l, e);
-                        return None;
-                    }
-                }
-                j = p.pos;
-                if l.toks.get(j).is_some_and(|t| t.is_sym(",")) {
-                    j += 1;
-                    continue;
-                }
-                break;
-            }
-            if !expect_end(cx, l, j) {
-                return None;
-            }
-        } else if !expect_end(cx, l, i) {
-            return None;
-        }
-        Some(args)
-    };
+    let with_args = |cx: &mut Ctx, i: usize| -> Option<Vec<Expr>> { parse_with_args(cx, l, i) };
     let screen_name = |cx: &mut Ctx, i: usize| -> Option<String> {
         match l.toks.get(i) {
             Some(Tok::Word(n)) => Some(n.clone()),
@@ -1401,10 +1500,54 @@ fn parse_action_inner(cx: &mut Ctx, l: &Line, children: &[Line]) -> Option<Actio
             Action::GoTo(name, args)
         }
         "back" | "dismiss" if l.toks.len() == 1 => Action::GoBack,
-        "show" | "present" | "sheet" => {
+        "show" | "present" | "sheet" | "cover" | "popover" | "inspector" => {
             let name = screen_name(cx, 1)?;
-            let args = with_args(cx, 2)?;
-            Action::Show(name, args)
+            // trailing `as half`, `as popover`, `locked`
+            let mut end = l.toks.len();
+            let mut locked = false;
+            let mut style = match head {
+                "cover" => "full",
+                "popover" => "popover",
+                "inspector" => "inspector",
+                _ => "sheet",
+            }
+            .to_string();
+            if word(end - 1) == Some("locked") {
+                locked = true;
+                end -= 1;
+            }
+            if end >= 2 && word(end - 2) == Some("as") {
+                match word(end - 1) {
+                    Some(st) if SHOW_STYLES.contains(&st) => {
+                        style = match st {
+                            "cover" => "full",
+                            "medium" => "half",
+                            "large" => "sheet",
+                            other => other,
+                        }
+                        .to_string();
+                        end -= 2;
+                    }
+                    _ => {
+                        cx.at(l, end - 1, "U109", "unknown presentation style",
+                            Some("styles: sheet, half, full, popover, inspector (add `locked` to stop swipe-to-close)".into()));
+                        return None;
+                    }
+                }
+            }
+            if word(end - 1) == Some("locked") {
+                locked = true;
+                end -= 1;
+            }
+            let trimmed = Line {
+                indent: l.indent,
+                line_no: l.line_no,
+                toks: l.toks[..end].to_vec(),
+                cols: l.cols[..end].to_vec(),
+                children: Vec::new(),
+            };
+            let args = parse_with_args(cx, &trimmed, 2)?;
+            Action::Show(name, args, style, locked)
         }
         "close" | "hide" if l.toks.len() == 1 => Action::Close,
         "alert" | "ask" | "confirm" => {
@@ -1456,6 +1599,64 @@ fn parse_action_inner(cx: &mut Ctx, l: &Line, children: &[Line]) -> Option<Actio
             };
             expect_end(cx, l, j);
             Action::Wait(ms)
+        }
+        "new" | "open" | "save" if word(1) == Some("document") && l.toks.len() == 2 => {
+            Action::Document(head.to_string())
+        }
+        "open" if word(1) == Some("window") => {
+            let name = screen_name(cx, 2)?;
+            let args = with_args(cx, 3)?;
+            Action::OpenWindow(name, args)
+        }
+        "open" | "import" if word(1) == Some("file") || head == "import" => {
+            // open file into notes [as text|json|image]
+            let mut i = if word(1) == Some("file") { 2 } else { 1 };
+            if word(i) != Some("into") {
+                cx.at(
+                    l,
+                    i,
+                    "U109",
+                    "expected `into`, e.g. `open file into notes`",
+                    None,
+                );
+                return None;
+            }
+            i += 1;
+            let (target, mut j) = path_expr(cx, l, i, &never)?;
+            let mut kind = "auto".to_string();
+            if word(j) == Some("as") {
+                match word(j + 1) {
+                    Some(k @ ("text" | "json" | "image" | "data")) => kind = k.to_string(),
+                    _ => {
+                        cx.at(l, j + 1, "U109", "file kinds: text, json, image", None);
+                        return None;
+                    }
+                }
+                j += 2;
+            }
+            expect_end(cx, l, j);
+            Action::OpenFile(target, kind)
+        }
+        "save" | "export" | "download" if l.toks.len() > 1 && word(1) != Some("with") => {
+            // save notes to file "notes.json"
+            let stop = |w: &str| w == "to" || w == "as";
+            let (v, mut i) = rest_expr(cx, l, 1, &stop)?;
+            if matches!(word(i), Some("to") | Some("as")) {
+                i += 1;
+            }
+            if word(i) == Some("file") {
+                i += 1;
+            }
+            let (name, j) = if i < l.toks.len() {
+                rest_expr(cx, l, i, &never)?
+            } else {
+                (
+                    Expr::Text(vec![super::expr::TextPart::Lit("data.json".into())]),
+                    i,
+                )
+            };
+            expect_end(cx, l, j);
+            Action::SaveFile(v, name)
         }
         "open" | "visit" => {
             let (v, i) = rest_expr(cx, l, 1, &never)?;

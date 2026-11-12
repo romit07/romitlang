@@ -12,6 +12,10 @@ pub struct App {
     pub screens: Vec<Screen>,
     pub views: Vec<Component>,
     pub events: Vec<EventBlock>,
+    /// `document notes, title`: state saved/opened as a file (DocumentGroup)
+    pub document: Vec<String>,
+    pub document_name: Option<Expr>,
+    pub document_line: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -48,9 +52,17 @@ pub struct ActionDef {
 pub struct Screen {
     pub name: String,
     pub title: Option<Expr>,
+    pub subtitle: Option<Expr>,
     pub params: Vec<String>,
     pub tab_icon: Option<Expr>,
-    pub toolbar: Vec<Node>,
+    /// small title in the bar instead of a large title (`inline`)
+    pub inline: bool,
+    /// opened from a gear button / ⌘, (`settings`, like SwiftUI's Settings scene)
+    pub settings: bool,
+    /// (placement, items): leading, trailing, title, bottom
+    pub toolbar: Vec<(String, Vec<Node>)>,
+    /// `sidebar` block: a split view (NavigationSplitView)
+    pub sidebar: Vec<Node>,
     pub body: Vec<Node>,
     pub events: Vec<EventBlock>,
     pub line: usize,
@@ -131,7 +143,16 @@ pub enum Action {
     GoTo(String, Vec<Expr>),
     GoBack,
     GoHome,
-    Show(String, Vec<Expr>),
+    /// screen, values, style (sheet/half/full/popover/inspector), locked
+    Show(String, Vec<Expr>, String, bool),
+    /// `open window Screen with …`
+    OpenWindow(String, Vec<Expr>),
+    /// `open file into x [as text|json|image]`
+    OpenFile(Expr, String),
+    /// `save x to file "name.json"`
+    SaveFile(Expr, Expr),
+    /// document File menu commands: new / open / save
+    Document(String),
     Close,
     Alert(Expr, Option<Expr>),
     Ask(Expr, Option<Expr>, Vec<Action>),
